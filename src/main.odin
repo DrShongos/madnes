@@ -4,6 +4,7 @@ import "core:fmt"
 import "core:os"
 
 import "rom_formats"
+import "console"
 
 main :: proc() {
 	nestest_file, success := os.read_entire_file_from_filename("nestest.nes")
@@ -19,6 +20,12 @@ main :: proc() {
 		fmt.printf("An error occured while parsing an INES file \n")
 		os.exit(-1)
 	}
+
+    emulated := console.init_console()
+    console.load_prg_rom(&emulated, test_rom.prg_rom)
+
+    emulated.cpu.program_counter = console.PC_NESTEST_START
+    console.run_console(&emulated)
 }
 
 print_bytes :: proc(bytes: []byte) {

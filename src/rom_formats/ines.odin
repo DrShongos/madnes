@@ -34,15 +34,15 @@ MAPPER_NYBBLE :: 0b11110000
 NES2_FORMAT_CHECK :: 0b00011000
 
 Flag6 :: enum {
-	Mirroring             = 0b00000001,
-	Use_Persistent_Memory = 0b00000010,
-	Use_Trainer           = 0b00000100,
-	Four_Screen_VRAM      = 0b00001000,
+	Mirroring             = 0,
+	Use_Persistent_Memory = 1,
+	Use_Trainer           = 2,
+	Four_Screen_VRAM      = 3,
 }
 
 Flag7 :: enum {
-	VS_Unisystem = 0b00000010,
-	PlayChoice   = 0b00000100,
+	VS_Unisystem = 1,
+	PlayChoice   = 2,
 }
 
 Flags6 :: bit_set[Flag6]
