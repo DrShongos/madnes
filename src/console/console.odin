@@ -4,20 +4,23 @@ import "core:fmt"
 import "core:os"
 
 Console :: struct {
-	cpu: CPU,
+	cpu:             CPU,
+	executed_cycles: u64,
 }
 
 init_console :: proc() -> Console {
-	console := Console{}
+	console := Console {
+		executed_cycles = 7,
+	}
 	console.cpu = init_cpu()
 
 	return console
 }
 
 run_console :: proc(console: ^Console) {
-    fmt.printf("Starting opcode: %x", console.cpu.memory[console.cpu.program_counter])
 	for {
 		run_cycle(&console.cpu)
+		console.executed_cycles += u64(console.cpu.cycle)
 		if console.cpu.cycle == 255 {
 			os.exit(-1)
 		}
@@ -29,6 +32,7 @@ load_prg_rom :: proc(console: ^Console, prg: []u8) {
 	copy(console.cpu.memory[PRG_ROM_START:], prg)
 	copy(console.cpu.memory[PRG_ROM_MIRROR:], prg)
 }
+
 
 u16_to_u8 :: proc(word: u16) -> (u8, u8) {
 	hi := (word & 0xFF)
