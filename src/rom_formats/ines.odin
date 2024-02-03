@@ -81,12 +81,12 @@ parse_ines_file :: proc(data: []u8) -> (INES_Format, INES_Parse_Error) {
 
 	ines_header.mapper = higher_mapper_nybble | (flags6 >> 4)
 
-	trainer_offset := 0
+	trainer_offset := 16
 	ines_format.trainer = nil
 	if .Use_Trainer in ines_header.flags6 {
 		ines_format.trainer = make([]u8, 512)
 		copy(ines_format.trainer, data[16:512])
-		trainer_offset = 512
+		trainer_offset = 16 + 512
 	}
 
 	prg_offset := trainer_offset + prg_size
