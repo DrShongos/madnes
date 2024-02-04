@@ -32,9 +32,12 @@ CPU :: struct {
 	stack_top:       u8,
 	program_counter: u16,
 	memory:          [0xFFFF + 1]u8,
+
+	// Opcode execution
 	cycle:           u8,
 	opcode_table:    [OPCODE_TABLE_SIZE]Opcode,
-    executed_cycles: u64,
+	page_crossed:    bool,
+	executed_cycles: u64,
 }
 
 init_cpu :: proc() -> CPU {
@@ -47,7 +50,8 @@ init_cpu :: proc() -> CPU {
 		program_counter = 0x8000,
 		cycle           = 0,
 		opcode_table    = create_opcode_table(),
-        executed_cycles = 7,
+		page_crossed    = false,
+		executed_cycles = 7,
 	}
 
 	for i := 0; i < 0xFFFF; i += 1 {
@@ -65,18 +69,22 @@ cpu_fetch :: proc(cpu: ^CPU) -> u8 {
 
 stack_push :: proc(cpu: ^CPU, val: u8) {
 	cpu.memory[cpu.stack_top] = val
-	cpu.stack_top += 1
+	cpu.stack_top -= 1
 }
 
 stack_pop :: proc(cpu: ^CPU) -> u8 {
-	cpu.stack_top -= 1
+	cpu.stack_top += 1
 	return cpu.memory[cpu.stack_top]
 }
 
 run_cycle :: proc(cpu: ^CPU) {
+	cpu.page_crossed = false
 	code := cpu.memory[cpu.program_counter]
 	opcode := cpu.opcode_table[code]
 	cpu.cycle = execute_opcode(&opcode, cpu)
-    cpu.executed_cycles += u64(cpu.cycle)
+	if cpu.page_crossed {
+		cpu.cycle += 1
+	}
+	cpu.executed_cycles += u64(cpu.cycle)
 	//cpu.program_counter += 1
 }

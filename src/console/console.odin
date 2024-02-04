@@ -4,14 +4,11 @@ import "core:fmt"
 import "core:os"
 
 Console :: struct {
-	cpu:             CPU,
-	executed_cycles: u64,
+	cpu: CPU,
 }
 
 init_console :: proc() -> Console {
-	console := Console {
-		executed_cycles = 7,
-	}
+	console := Console{}
 	console.cpu = init_cpu()
 
 	return console
@@ -20,7 +17,6 @@ init_console :: proc() -> Console {
 run_console :: proc(console: ^Console) {
 	for {
 		run_cycle(&console.cpu)
-		console.executed_cycles += u64(console.cpu.cycle)
 		if console.cpu.cycle == 255 {
 			os.exit(-1)
 		}
