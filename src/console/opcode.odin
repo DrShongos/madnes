@@ -25,140 +25,6 @@ Opcode :: struct {
 	action:          proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8,
 }
 
-create_opcode_table :: proc() -> [OPCODE_TABLE_SIZE]Opcode {
-	opcode_table := [OPCODE_TABLE_SIZE]Opcode{}
-
-	for i := 0; i < OPCODE_TABLE_SIZE; i += 1 {
-		opcode_table[i] = Opcode {
-			name            = "INVALID",
-			addressing_mode = Addressing_Mode.Implied,
-			action          = invalid,
-		}
-	}
-
-	opcode_table[0] = Opcode {
-		name            = "BRK",
-		addressing_mode = Addressing_Mode.Implied,
-		action          = brk,
-	}
-
-	opcode_table[0x18] = Opcode {
-		name            = "CLC",
-		addressing_mode = Addressing_Mode.Implied,
-		action          = clc,
-	}
-
-	opcode_table[0x20] = Opcode {
-		name            = "JSR",
-		addressing_mode = Addressing_Mode.Absolute,
-		action          = jsr,
-	}
-
-	opcode_table[0x38] = Opcode {
-		name            = "SEC",
-		addressing_mode = Addressing_Mode.Implied,
-		action          = sec,
-	}
-
-	opcode_table[0x4c] = Opcode {
-		name            = "JMP",
-		addressing_mode = Addressing_Mode.Absolute,
-		action          = jmp,
-	}
-
-	opcode_table[0x81] = Opcode {
-		name            = "STA",
-		addressing_mode = Addressing_Mode.Indexed_Indirect,
-		action          = sta,
-	}
-
-	opcode_table[0x85] = Opcode {
-		name            = "STA",
-		addressing_mode = Addressing_Mode.Zero_Page,
-		action          = sta,
-	}
-
-	opcode_table[0x86] = Opcode {
-		name            = "STX",
-		addressing_mode = Addressing_Mode.Zero_Page,
-		action          = stx,
-	}
-
-	opcode_table[0x8d] = Opcode {
-		name            = "STA",
-		addressing_mode = Addressing_Mode.Absolute,
-		action          = sta,
-	}
-
-	opcode_table[0x90] = Opcode {
-		name            = "BCC",
-		addressing_mode = Addressing_Mode.Relative,
-		action          = bcc,
-	}
-
-	opcode_table[0x91] = Opcode {
-		name            = "STA",
-		addressing_mode = Addressing_Mode.Indirect_Indexed,
-		action          = sta,
-	}
-
-	opcode_table[0x95] = Opcode {
-		name            = "STA",
-		addressing_mode = Addressing_Mode.Zero_Page_X,
-		action          = sta,
-	}
-
-	opcode_table[0x9d] = Opcode {
-		name            = "STA",
-		addressing_mode = Addressing_Mode.Absolute_X,
-		action          = sta,
-	}
-
-	opcode_table[0x99] = Opcode {
-		name            = "STA",
-		addressing_mode = Addressing_Mode.Absolute_Y,
-		action          = sta,
-	}
-
-	opcode_table[0xa2] = Opcode {
-		name            = "LDX",
-		addressing_mode = Addressing_Mode.Immediate,
-		action          = ldx,
-	}
-
-	opcode_table[0xa9] = Opcode {
-		name            = "LDA",
-		addressing_mode = Addressing_Mode.Immediate,
-		action          = lda,
-	}
-
-	opcode_table[0xb0] = Opcode {
-		name            = "BCS",
-		addressing_mode = Addressing_Mode.Relative,
-		action          = bcs,
-	}
-
-	opcode_table[0xd0] = Opcode {
-		name            = "BNE",
-		addressing_mode = Addressing_Mode.Relative,
-		action          = bne,
-	}
-
-	opcode_table[0xea] = Opcode {
-		name            = "NOP",
-		addressing_mode = Addressing_Mode.Implied,
-		action          = nop,
-	}
-
-	opcode_table[0xf0] = Opcode {
-		name            = "BEQ",
-		addressing_mode = Addressing_Mode.Relative,
-		action          = beq,
-	}
-
-	return opcode_table
-}
-
 trace_opcode :: proc(opcode: ^Opcode, cpu: ^CPU) {
 	fmt.printf("%x %x ", cpu.program_counter, cpu.memory[cpu.program_counter])
 
@@ -273,11 +139,17 @@ read_memory :: proc(mode: Addressing_Mode, cpu: ^CPU) -> (u8, u8) {
 		return cpu_fetch(cpu), cpu_fetch(cpu)
 	case .Absolute_X:
 		address := u8_to_u16(cpu_fetch(cpu), cpu_fetch(cpu))
-		address += u16(cpu.register_x)
+		new_address := address + u16(cpu.register_x)
+		if address & 0xFF00 < new_address & 0xFF00 || address & 0xFF00 > new_address & 0xFF00 {
+			cpu.page_crossed = true
+		}
 		return u16_to_u8(address)
 	case .Absolute_Y:
 		address := u8_to_u16(cpu_fetch(cpu), cpu_fetch(cpu))
-		address += u16(cpu.register_y)
+		new_address := address + u16(cpu.register_y)
+		if address & 0xFF00 < new_address & 0xFF00 || address & 0xFF00 > new_address & 0xFF00 {
+			cpu.page_crossed = true
+		}
 		return u16_to_u8(address)
 	case .Indirect:
 		hi := cpu_fetch(cpu)
@@ -483,11 +355,146 @@ jsr :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
 	return 6
 }
 
+rts :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
+	hi := stack_pop(cpu)
+	lo := stack_pop(cpu)
+
+	return_address := u8_to_u16(hi, lo)
+	cpu.program_counter = return_address
+	cpu_fetch(cpu)
+
+	return 6
+}
+
+bit :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
+	hi, lo := read_memory(addressing_mode, cpu)
+	addr := u8_to_u16(hi, lo)
+
+	test_val := cpu.memory[addr]
+
+	result := test_val & cpu.accumulator
+	if result == 0 {
+		cpu.status += {.Zero}
+	} else {
+		cpu.status -= {.Zero}
+	}
+
+	bit_6 := test_val & 0b01000000
+	bit_7 := test_val & 0b10000000
+
+	// There's no way to manually set specific bit_set flag
+	if bit_6 == 0 {
+		cpu.status -= {.Overflow}
+	} else {
+		cpu.status += {.Overflow}
+	}
+
+	if bit_7 == 0 {
+		cpu.status -= {.Negative}
+	} else {
+		cpu.status += {.Negative}
+	}
+
+	cpu_fetch(cpu)
+
+	if addressing_mode == .Zero_Page {
+		return 3
+	}
+	return 4
+}
+
+and :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
+	test_val: u8 = 0
+
+	hi, lo := read_memory(addressing_mode, cpu)
+	addr := u8_to_u16(hi, lo)
+
+	test_val = cpu.memory[addr]
+	if addressing_mode == .Immediate {
+		test_val = hi
+	}
+
+	cpu.accumulator &= test_val
+
+	if cpu.accumulator == 0 {
+		cpu.status += {.Zero}
+	} else {
+		cpu.status -= {.Zero}
+	}
+
+	if cpu.accumulator & 0b10000000 != 0 {
+		cpu.status += {.Negative}
+	} else {
+		cpu.status -= {.Negative}
+	}
+
+	cpu_fetch(cpu)
+
+	#partial switch addressing_mode {
+	case .Immediate:
+		return 2
+	case .Zero_Page:
+		return 3
+	case .Zero_Page_X:
+		return 4
+	case .Absolute:
+		return 4
+	case .Absolute_X:
+		return 4
+	case .Absolute_Y:
+		return 4
+	case .Indexed_Indirect:
+		return 6
+	case .Indirect_Indexed:
+		return 5
+	}
+
+	return 5 //unreachable
+}
+
 bcs :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
 	offset_hi, offset_lo := read_memory(addressing_mode, cpu)
 	pc_move := u8_to_u16(offset_hi, offset_lo)
 
 	if .Carry in cpu.status {
+		prev_pc := cpu.program_counter
+		cpu.program_counter = pc_move
+		cpu_fetch(cpu)
+
+		if (pc_move & 0xFF00) > (prev_pc & 0xFF00) || (pc_move & 0xFF00) < (prev_pc & 0xFF00) {
+			return 5
+		}
+		return 3
+	}
+
+	cpu_fetch(cpu)
+	return 2
+}
+
+bvs :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
+	offset_hi, offset_lo := read_memory(addressing_mode, cpu)
+	pc_move := u8_to_u16(offset_hi, offset_lo)
+
+	if .Overflow in cpu.status {
+		prev_pc := cpu.program_counter
+		cpu.program_counter = pc_move
+		cpu_fetch(cpu)
+
+		if (pc_move & 0xFF00) > (prev_pc & 0xFF00) || (pc_move & 0xFF00) < (prev_pc & 0xFF00) {
+			return 5
+		}
+		return 3
+	}
+
+	cpu_fetch(cpu)
+	return 2
+}
+
+bvc :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
+	offset_hi, offset_lo := read_memory(addressing_mode, cpu)
+	pc_move := u8_to_u16(offset_hi, offset_lo)
+
+	if !(.Overflow in cpu.status) {
 		prev_pc := cpu.program_counter
 		cpu.program_counter = pc_move
 		cpu_fetch(cpu)
@@ -559,8 +566,39 @@ bne :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
 	return 2
 }
 
+bpl :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
+	offset_hi, offset_lo := read_memory(addressing_mode, cpu)
+	pc_move := u8_to_u16(offset_hi, offset_lo)
+
+	if !(.Negative in cpu.status) {
+		prev_pc := cpu.program_counter
+		cpu.program_counter = pc_move
+		cpu_fetch(cpu)
+
+		if (pc_move & 0xFF00) > (prev_pc & 0xFF00) || (pc_move & 0xFF00) < (prev_pc & 0xFF00) {
+			return 5
+		}
+		return 3
+	}
+
+	cpu_fetch(cpu)
+	return 2
+}
+
 sec :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
 	cpu.status += {.Carry}
+	cpu_fetch(cpu)
+	return 2
+}
+
+sei :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
+	cpu.status += {.Interrupt_Disable}
+	cpu_fetch(cpu)
+	return 2
+}
+
+sed :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
+	cpu.status += {.Decimal_Mode}
 	cpu_fetch(cpu)
 	return 2
 }
@@ -574,4 +612,30 @@ clc :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
 nop :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
 	cpu_fetch(cpu)
 	return 2
+}
+
+php :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
+	stack_push(cpu, transmute(u8)cpu.status)
+	cpu_fetch(cpu)
+	return 3
+}
+
+pla :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
+	cpu.accumulator = stack_pop(cpu)
+
+	if cpu.accumulator == 0 {
+		cpu.status += {.Zero}
+	} else {
+		cpu.status -= {.Zero}
+	}
+
+	if cpu.accumulator & 0b10000000 != 0 {
+		cpu.status += {.Negative}
+	} else {
+		cpu.status -= {.Negative}
+	}
+
+	cpu_fetch(cpu)
+
+	return 4
 }
