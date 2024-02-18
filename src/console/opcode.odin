@@ -170,12 +170,25 @@ read_memory :: proc(mode: Addressing_Mode, cpu: ^CPU) -> (u8, u8) {
         }
         return u16_to_u8(address)
     case .Indirect:
-        hi := cpu_fetch(cpu)
-        lo := cpu_fetch(cpu)
+        target_hi := cpu_fetch(cpu)
+        target_lo := cpu_fetch(cpu)
 
-        lo_address := u8_to_u16(hi, lo)
-        real_lo := cpu.memory[lo_address]
-        return hi, real_lo
+        hi_address := u8_to_u16(target_hi, target_lo)
+
+        real_hi := cpu.memory[hi_address]
+        real_lo := cpu.memory[hi_address + 1]
+
+        // Handle a hardware bug where attempting to fetch the indirect address from the end of a page causes the memory to wrap around
+        if hi_address & 0x00FF == 0x00FF {
+            // According to the results from the nestest rom these two have to be swapped around in this edge case despite every documentation i've seen not specyfying that.
+            // That, or I simply have zero reading comprehension
+            // I have literally zero idea if it will work on any other program and I don't want to know
+            real_lo = cpu.memory[u8_to_u16(0x00, target_lo)]
+            real_hi = cpu.memory[hi_address]
+        }
+
+
+        return real_hi, real_lo
     case .Indexed_Indirect:
         address := u8_to_u16(cpu_fetch(cpu), 0x00)
         new_address := zero_page_wrap(address, u16(cpu.register_x), cpu)
@@ -228,6 +241,23 @@ set_register_y :: proc(cpu: ^CPU, value: u8) {
 @(private)
 set_accumulator :: proc(cpu: ^CPU, value: u8) {
     cpu.accumulator = value
+
+    if value == 0 {
+        cpu.status += {.Zero}
+    } else {
+        cpu.status -= {.Zero}
+    }
+
+    if value & 0b10000000 != 0 {
+        cpu.status += {.Negative}
+    } else {
+        cpu.status -= {.Negative}
+    }
+}
+
+@(private)
+set_memory :: proc(cpu: ^CPU, value: u8, address: u16) {
+    cpu.memory[address] = value
 
     if value == 0 {
         cpu.status += {.Zero}
@@ -327,6 +357,34 @@ ldx :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
     return 4
 }
 
+ldy :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
+    hi, lo := read_memory(addressing_mode, cpu)
+
+    new_y := hi
+    if addressing_mode != .Immediate {
+        new_y = cpu.memory[u8_to_u16(hi, lo)]
+    }
+
+    set_register_y(cpu, new_y)
+
+    cpu_fetch(cpu)
+
+    #partial switch addressing_mode {
+    case .Immediate:
+        return 2
+    case .Zero_Page:
+        return 3
+    case .Zero_Page_X:
+        return 4
+    case .Absolute:
+        return 4
+    case .Absolute_X:
+        return 4
+    }
+
+    return 4
+}
+
 stx :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
     addr_hi, addr_lo := read_memory(addressing_mode, cpu)
     address: u16 = u8_to_u16(addr_hi, addr_lo)
@@ -338,6 +396,25 @@ stx :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
     case .Zero_Page:
         return 3
     case .Zero_Page_Y:
+        return 4
+    case .Absolute:
+        return 4
+    }
+
+    return 4
+}
+
+sty :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
+    addr_hi, addr_lo := read_memory(addressing_mode, cpu)
+    address: u16 = u8_to_u16(addr_hi, addr_lo)
+
+    cpu.memory[address] = cpu.register_y
+    cpu_fetch(cpu)
+
+    #partial switch addressing_mode {
+    case .Zero_Page:
+        return 3
+    case .Zero_Page_X:
         return 4
     case .Absolute:
         return 4
@@ -408,6 +485,20 @@ rts :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
     return_address := u8_to_u16(hi, lo)
     cpu.program_counter = return_address
     cpu_fetch(cpu)
+
+    return 6
+}
+
+rti :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
+    new_status := stack_pop(cpu)
+    hi := stack_pop(cpu)
+    lo := stack_pop(cpu)
+
+    return_address := u8_to_u16(hi, lo)
+    cpu.program_counter = return_address
+
+    cpu.status = transmute(Processor_Status)new_status
+    cpu.status += {.Always_1}
 
     return 6
 }
@@ -507,6 +598,64 @@ adc :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
 
     // Checks whether the signs of the allocator and the value of the memory would make it impossible to create the result's sign
     if ((cpu.accumulator ~ result) & (add_val ~ result) & 0x80) == 0x80 {
+        cpu.status += {.Overflow}
+    } else {
+        cpu.status -= {.Overflow}
+    }
+
+    if carry_test >> 8 != 0 {
+        cpu.status += {.Carry}
+    } else {
+        cpu.status -= {.Carry}
+    }
+
+    set_accumulator(cpu, result)
+
+    cpu_fetch(cpu)
+
+    #partial switch addressing_mode {
+    case .Immediate:
+        return 2
+    case .Zero_Page:
+        return 3
+    case .Zero_Page_X:
+        return 4
+    case .Absolute:
+        return 4
+    case .Absolute_X:
+        return 4
+    case .Absolute_Y:
+        return 4
+    case .Indexed_Indirect:
+        return 6
+    case .Indirect_Indexed:
+        return 5
+    }
+
+    return 5 //unreachable
+}
+
+sbc :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
+    add_val: u8 = 0
+
+    hi, lo := read_memory(addressing_mode, cpu)
+    addr := u8_to_u16(hi, lo)
+
+    add_val = cpu.memory[addr]
+    if addressing_mode == .Immediate {
+        add_val = hi
+    }
+
+    result := cpu.accumulator + ~add_val + transmute(u8)(cpu.status & {.Carry})
+
+    // carry_test is created to check if getting rid of the first 8 bits would leave a potential carry bit behind
+    carry_test :=
+        u16(cpu.accumulator) +
+        u16(~add_val) +
+        u16(transmute(u8)(cpu.status & {.Carry}))
+
+    // Checks whether the signs of the allocator and the value of the memory would make it impossible to create the result's sign
+    if ((cpu.accumulator ~ result) & (~add_val ~ result) & 0x80) == 0x80 {
         cpu.status += {.Overflow}
     } else {
         cpu.status -= {.Overflow}
@@ -865,6 +1014,90 @@ cmp :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
     return 1
 }
 
+cpy :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
+    read_hi, read_lo := read_memory(addressing_mode, cpu)
+
+    test_val := cpu.memory[u8_to_u16(read_hi, read_lo)]
+    if addressing_mode == Addressing_Mode.Immediate {
+        test_val = read_hi
+    }
+
+    if cpu.register_y >= test_val {
+        cpu.status += {.Carry}
+    } else {
+        cpu.status -= {.Carry}
+    }
+
+    if cpu.register_y == test_val {
+        cpu.status += {.Zero}
+    } else {
+        cpu.status -= {.Zero}
+    }
+
+    test_result := cpu.register_y - test_val
+
+    if test_result & 0b10000000 != 0 {
+        cpu.status += {.Negative}
+    } else {
+        cpu.status -= {.Negative}
+    }
+
+    cpu_fetch(cpu)
+
+    #partial switch addressing_mode {
+    case .Immediate:
+        return 2
+    case .Zero_Page:
+        return 3
+    case .Absolute:
+        return 4
+    }
+
+    return 1
+}
+
+cpx :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
+    read_hi, read_lo := read_memory(addressing_mode, cpu)
+
+    test_val := cpu.memory[u8_to_u16(read_hi, read_lo)]
+    if addressing_mode == Addressing_Mode.Immediate {
+        test_val = read_hi
+    }
+
+    if cpu.register_x >= test_val {
+        cpu.status += {.Carry}
+    } else {
+        cpu.status -= {.Carry}
+    }
+
+    if cpu.register_x == test_val {
+        cpu.status += {.Zero}
+    } else {
+        cpu.status -= {.Zero}
+    }
+
+    test_result := cpu.register_x - test_val
+
+    if test_result & 0b10000000 != 0 {
+        cpu.status += {.Negative}
+    } else {
+        cpu.status -= {.Negative}
+    }
+
+    cpu_fetch(cpu)
+
+    #partial switch addressing_mode {
+    case .Immediate:
+        return 2
+    case .Zero_Page:
+        return 3
+    case .Absolute:
+        return 4
+    }
+
+    return 1
+}
+
 cld :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
     cpu.status -= {.Decimal_Mode}
     cpu_fetch(cpu)
@@ -903,4 +1136,354 @@ pha :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
     cpu_fetch(cpu)
 
     return 3
+}
+
+dex :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
+    set_register_x(cpu, cpu.register_x - 1)
+
+    cpu_fetch(cpu)
+    return 2
+}
+
+inx :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
+    set_register_x(cpu, cpu.register_x + 1)
+
+    cpu_fetch(cpu)
+    return 2
+}
+
+dey :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
+    set_register_y(cpu, cpu.register_y - 1)
+
+    cpu_fetch(cpu)
+    return 2
+}
+
+dec :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
+    hi, lo := read_memory(addressing_mode, cpu)
+
+    addr := u8_to_u16(hi, lo)
+    set_memory(cpu, cpu.memory[addr] - 1, addr)
+
+    cpu_fetch(cpu)
+
+    #partial switch addressing_mode {
+    case .Zero_Page:
+        return 5
+    case .Zero_Page_X:
+        return 6
+    case .Absolute:
+        return 6
+    case .Absolute_X:
+        return 7
+    }
+    return 2
+}
+
+iny :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
+    set_register_y(cpu, cpu.register_y + 1)
+
+    cpu_fetch(cpu)
+    return 2
+}
+
+inc :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
+    hi, lo := read_memory(addressing_mode, cpu)
+
+    addr := u8_to_u16(hi, lo)
+    set_memory(cpu, cpu.memory[addr] + 1, addr)
+
+    cpu_fetch(cpu)
+
+    #partial switch addressing_mode {
+    case .Zero_Page:
+        return 5
+    case .Zero_Page_X:
+        return 6
+    case .Absolute:
+        return 6
+    case .Absolute_X:
+        return 7
+    }
+    return 2
+}
+
+tax :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
+    set_register_x(cpu, cpu.accumulator)
+
+    cpu_fetch(cpu)
+    return 2
+}
+
+tay :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
+    set_register_y(cpu, cpu.accumulator)
+
+    cpu_fetch(cpu)
+    return 2
+}
+
+tya :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
+    set_accumulator(cpu, cpu.register_y)
+
+    cpu_fetch(cpu)
+    return 2
+}
+
+txa :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
+    set_accumulator(cpu, cpu.register_x)
+
+    cpu_fetch(cpu)
+    return 2
+}
+
+tsx :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
+    set_register_x(cpu, cpu.stack_top)
+
+    cpu_fetch(cpu)
+    return 2
+}
+
+txs :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
+    cpu.stack_top = cpu.register_x
+
+    cpu_fetch(cpu)
+    return 2
+}
+
+
+lsr :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
+    if addressing_mode == .Accumulator {
+        old := cpu.accumulator
+
+        set_accumulator(cpu, cpu.accumulator >> 1)
+
+        if old & 0x01 != 0 {
+            cpu.status += {.Carry}
+        } else {
+            cpu.status -= {.Carry}
+        }
+    } else {
+        hi, lo := read_memory(addressing_mode, cpu)
+
+        addr := u8_to_u16(hi, lo)
+        memory := cpu.memory[addr]
+
+        result := memory >> 1
+
+        if result == 0 {
+            cpu.status += {.Zero}
+        } else {
+            cpu.status -= {.Zero}
+        }
+
+        if is_negative(result) {
+            cpu.status += {.Negative}
+        } else {
+            cpu.status -= {.Negative}
+        }
+
+        if memory & 0x01 != 0 {
+            cpu.status += {.Carry}
+        } else {
+            cpu.status -= {.Carry}
+        }
+
+        cpu.memory[addr] = result
+    }
+
+    cpu_fetch(cpu)
+    #partial switch addressing_mode {
+    case .Accumulator:
+        return 2
+    case .Zero_Page:
+        return 5
+    case .Zero_Page_X:
+        return 6
+    case .Absolute:
+        return 6
+    case .Absolute_X:
+        return 7
+    }
+
+    return 2
+}
+
+asl :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
+    if addressing_mode == .Accumulator {
+        old := cpu.accumulator
+
+        set_accumulator(cpu, cpu.accumulator << 1)
+
+        if old & 0x80 != 0 {
+            cpu.status += {.Carry}
+        } else {
+            cpu.status -= {.Carry}
+        }
+    } else {
+        hi, lo := read_memory(addressing_mode, cpu)
+
+        addr := u8_to_u16(hi, lo)
+        memory := cpu.memory[addr]
+
+        result := memory << 1
+
+        if result == 0 {
+            cpu.status += {.Zero}
+        } else {
+            cpu.status -= {.Zero}
+        }
+
+        if is_negative(result) {
+            cpu.status += {.Negative}
+        } else {
+            cpu.status -= {.Negative}
+        }
+
+        if memory & 0x80 != 0 {
+            cpu.status += {.Carry}
+        } else {
+            cpu.status -= {.Carry}
+        }
+
+        cpu.memory[addr] = result
+    }
+
+    cpu_fetch(cpu)
+    #partial switch addressing_mode {
+    case .Accumulator:
+        return 2
+    case .Zero_Page:
+        return 5
+    case .Zero_Page_X:
+        return 6
+    case .Absolute:
+        return 6
+    case .Absolute_X:
+        return 7
+    }
+
+    return 2
+}
+
+ror :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
+    if addressing_mode == .Accumulator {
+        old := cpu.accumulator
+
+        new_acc :=
+            ((cpu.accumulator >> 1) & 0b01111111) |
+            transmute(u8)(cpu.status & {.Carry}) << 7
+        set_accumulator(cpu, new_acc)
+
+        if old & 0x01 != 0 {
+            cpu.status += {.Carry}
+        } else {
+            cpu.status -= {.Carry}
+        }
+    } else {
+        hi, lo := read_memory(addressing_mode, cpu)
+
+        addr := u8_to_u16(hi, lo)
+        memory := cpu.memory[addr]
+
+        result :=
+            ((memory >> 1) & 0b01111111) |
+            transmute(u8)(cpu.status & {.Carry}) << 7
+
+        if result == 0 {
+            cpu.status += {.Zero}
+        } else {
+            cpu.status -= {.Zero}
+        }
+
+        if is_negative(result) {
+            cpu.status += {.Negative}
+        } else {
+            cpu.status -= {.Negative}
+        }
+
+        if memory & 0x01 != 0 {
+            cpu.status += {.Carry}
+        } else {
+            cpu.status -= {.Carry}
+        }
+
+        cpu.memory[addr] = result
+    }
+
+    cpu_fetch(cpu)
+    #partial switch addressing_mode {
+    case .Accumulator:
+        return 2
+    case .Zero_Page:
+        return 5
+    case .Zero_Page_X:
+        return 6
+    case .Absolute:
+        return 6
+    case .Absolute_X:
+        return 7
+    }
+
+    return 2
+}
+
+rol :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
+    if addressing_mode == .Accumulator {
+        old := cpu.accumulator
+
+        new_acc :=
+            ((cpu.accumulator << 1) & 0b11111110) |
+            transmute(u8)(cpu.status & {.Carry})
+        set_accumulator(cpu, new_acc)
+
+        if old & 0x80 != 0 {
+            cpu.status += {.Carry}
+        } else {
+            cpu.status -= {.Carry}
+        }
+    } else {
+        hi, lo := read_memory(addressing_mode, cpu)
+
+        addr := u8_to_u16(hi, lo)
+        memory := cpu.memory[addr]
+
+        result :=
+            ((memory << 1) & 0b11111110) | transmute(u8)(cpu.status & {.Carry})
+
+        if result == 0 {
+            cpu.status += {.Zero}
+        } else {
+            cpu.status -= {.Zero}
+        }
+
+        if is_negative(result) {
+            cpu.status += {.Negative}
+        } else {
+            cpu.status -= {.Negative}
+        }
+
+        if memory & 0x80 != 0 {
+            cpu.status += {.Carry}
+        } else {
+            cpu.status -= {.Carry}
+        }
+
+        cpu.memory[addr] = result
+    }
+
+    cpu_fetch(cpu)
+    #partial switch addressing_mode {
+    case .Accumulator:
+        return 2
+    case .Zero_Page:
+        return 5
+    case .Zero_Page_X:
+        return 6
+    case .Absolute:
+        return 6
+    case .Absolute_X:
+        return 7
+    }
+
+    return 2
 }
