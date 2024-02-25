@@ -101,6 +101,12 @@ create_opcode_table :: proc() -> [OPCODE_TABLE_SIZE]Opcode {
         action          = ora,
     }
 
+    opcode_table[0x1a] = Opcode {
+        name = "NOP",
+        addressing_mode = Addressing_Mode.Implied,
+        action = nop,
+    }
+
     opcode_table[0x1d] = Opcode {
         name            = "ORA",
         addressing_mode = Addressing_Mode.Absolute_X,
@@ -215,6 +221,12 @@ create_opcode_table :: proc() -> [OPCODE_TABLE_SIZE]Opcode {
         action          = and,
     }
 
+    opcode_table[0x3a] = Opcode {
+        name = "NOP",
+        addressing_mode = Addressing_Mode.Implied,
+        action = nop,
+    }
+
     opcode_table[0x3d] = Opcode {
         name            = "AND",
         addressing_mode = Addressing_Mode.Absolute_X,
@@ -315,6 +327,12 @@ create_opcode_table :: proc() -> [OPCODE_TABLE_SIZE]Opcode {
         name            = "EOR",
         addressing_mode = Addressing_Mode.Absolute_Y,
         action          = eor,
+    }
+
+    opcode_table[0x5a] = Opcode {
+        name = "NOP",
+        addressing_mode = Addressing_Mode.Implied,
+        action = nop,
     }
 
     opcode_table[0x5d] = Opcode {
@@ -423,6 +441,12 @@ create_opcode_table :: proc() -> [OPCODE_TABLE_SIZE]Opcode {
         name            = "ADC",
         addressing_mode = Addressing_Mode.Absolute_Y,
         action          = adc,
+    }
+
+    opcode_table[0x7a] = Opcode {
+        name = "NOP",
+        addressing_mode = Addressing_Mode.Implied,
+        action = nop,
     }
 
     opcode_table[0x7d] = Opcode {
@@ -779,6 +803,12 @@ create_opcode_table :: proc() -> [OPCODE_TABLE_SIZE]Opcode {
         action          = dec,
     }
 
+    opcode_table[0xda] = Opcode {
+        name = "NOP",
+        addressing_mode = Addressing_Mode.Implied,
+        action = nop,
+    }
+
     opcode_table[0xdd] = Opcode {
         name            = "CMP",
         addressing_mode = Addressing_Mode.Absolute_X,
@@ -897,6 +927,12 @@ create_opcode_table :: proc() -> [OPCODE_TABLE_SIZE]Opcode {
         name            = "SBC",
         addressing_mode = Addressing_Mode.Absolute_Y,
         action          = sbc,
+    }
+
+    opcode_table[0xfa] = Opcode {
+        name = "NOP",
+        addressing_mode = Addressing_Mode.Implied,
+        action = nop,
     }
 
     opcode_table[0xfd] = Opcode {

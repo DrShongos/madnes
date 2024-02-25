@@ -3,11 +3,19 @@ package madnes
 import "core:fmt"
 import "core:os"
 
+import "emulator"
 import "console"
 import "rom_formats"
 
 main :: proc() {
-    nestest_file, success := os.read_entire_file_from_filename("nestest.nes")
+    args := os.args
+
+    if len(args) < 2 {
+        fmt.printf("Please specify a ROM file \n");
+        os.exit(-1)
+    }
+
+    nestest_file, success := os.read_entire_file_from_filename(args[1])
     if !success {
         fmt.printf("COULD NOT OPEN FILE\n")
         os.exit(-1)
@@ -21,11 +29,12 @@ main :: proc() {
         os.exit(-1)
     }
 
-    emulated := console.init_console()
-    console.load_prg_rom(&emulated, test_rom.prg_rom)
+    emu := emulator.init_emulator()
+    console.load_prg_rom(&emu.console, test_rom.prg_rom)
 
-    emulated.cpu.program_counter = console.PC_NESTEST_START
-    console.run_console(&emulated)
+    emu.console.cpu.program_counter = console.u8_to_u16(emu.console.cpu.memory[0xFFFC], emu.console.cpu.memory[0xFFFD])
+
+    emulator.run_emulator(&emu)
 }
 
 print_bytes :: proc(bytes: []byte) {

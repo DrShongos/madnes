@@ -32,6 +32,7 @@ CPU :: struct {
     stack_top:       u8,
     program_counter: u16,
     memory:          [0xFFFF + 1]u8,
+    memory_bus: ^Memory_Bus,
 
     // Opcode execution
     cycle:           u8,

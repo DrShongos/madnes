@@ -4,22 +4,31 @@ import "core:fmt"
 import "core:os"
 
 Console :: struct {
-    cpu: CPU,
+    cpu:        CPU,
+    memory_bus: Memory_Bus,
+}
+
+Memory_Bus :: struct {
+    cpu:    ^CPU,
+    mapper: Mapper,
 }
 
 init_console :: proc() -> Console {
     console := Console{}
     console.cpu = init_cpu()
 
+    console.memory_bus = Memory_Bus {
+        cpu = &console.cpu,
+    }
+    console.cpu.memory_bus = &console.memory_bus
+
     return console
 }
 
-run_console :: proc(console: ^Console) {
-    for {
-        run_cycle(&console.cpu)
-        if console.cpu.cycle == 255 {
-            os.exit(-1)
-        }
+console_tick :: proc(console: ^Console) {
+    run_cycle(&console.cpu)
+    if console.cpu.cycle == 255 {
+        os.exit(-1)
     }
 }
 

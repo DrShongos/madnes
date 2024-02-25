@@ -128,7 +128,7 @@ zero_page_wrap :: proc(mem: u16, add: u16, cpu: ^CPU) -> u16 {
     return new_address
 }
 
-read_memory :: proc(mode: Addressing_Mode, cpu: ^CPU) -> (u8, u8) {
+read_address :: proc(mode: Addressing_Mode, cpu: ^CPU) -> (u8, u8) {
     #partial switch mode {
     case .Immediate:
         return cpu_fetch(cpu), 0
@@ -143,12 +143,13 @@ read_memory :: proc(mode: Addressing_Mode, cpu: ^CPU) -> (u8, u8) {
         offset_pc := cpu.program_counter
         // This statement exists because the sign gets removed 
         // upon conversion to an unsigned integer
-        if offset < 0 {
+        //if offset & 0x80 != 0 {
             // This will probably cause a bug later
-            offset_pc -= (u16(offset) - 128)
-        } else {
+        //    offset_pc += u16(offset)
+        //} else {
             offset_pc += u16(offset)
-        }
+            //offset_pc -= 1
+        //}
 
         return u16_to_u8(offset_pc)
     case .Absolute:
@@ -204,6 +205,59 @@ read_memory :: proc(mode: Addressing_Mode, cpu: ^CPU) -> (u8, u8) {
     return 0, 0
 }
 
+// Returns the byte placed in memory.
+// It handles address mirroring and accessing registers of
+// Other components of the console.
+read_memory :: proc(cpu: ^CPU, addr: u16) -> u8 {
+    // Interal RAM Mirrors
+    if addr >= 0x0800 && addr <= 0x0FFF {
+        return cpu.memory[addr - 0x0800]
+    }
+
+    if addr >= 0x1000 && addr <= 0x17FF {
+        return cpu.memory[addr - 0x1000]
+    }
+
+    if addr >= 0x1800 && addr <= 0x1FFF {
+        return cpu.memory[addr - 0x1800]
+    }
+    
+    // TODO: PPU Registers
+    // TODO: Mapper Registers
+    // TODO: IO Registers
+    // TODO: APU Registers
+
+    return cpu.memory[addr]
+}
+
+// Writes to the byte placed in memory.
+// It handles address mirroring and accessing registers of
+// Other components of the console.
+write_memory :: proc(cpu: ^CPU, addr: u16, val: u8) {
+    // Interal RAM Mirrors
+    if addr >= 0x0800 && addr <= 0x0FFF {
+        cpu.memory[addr - 0x0800] = val
+        return
+    }
+
+    if addr >= 0x1000 && addr <= 0x17FF {
+        cpu.memory[addr - 0x1000] = val
+        return
+    }
+
+    if addr >= 0x1800 && addr <= 0x1FFF {
+        cpu.memory[addr - 0x1800] = val 
+        return
+    }
+    
+    // TODO: PPU Registers
+    // TODO: Mapper Registers
+    // TODO: IO Registers
+    // TODO: APU Registers
+
+    cpu.memory[addr] = val
+}
+
 @(private)
 set_register_x :: proc(cpu: ^CPU, value: u8) {
     cpu.register_x = value
@@ -255,9 +309,10 @@ set_accumulator :: proc(cpu: ^CPU, value: u8) {
     }
 }
 
+// Writes to the memory and toggles appropriate processor flags
 @(private)
 set_memory :: proc(cpu: ^CPU, value: u8, address: u16) {
-    cpu.memory[address] = value
+    write_memory(cpu, address, value)
 
     if value == 0 {
         cpu.status += {.Zero}
@@ -287,8 +342,8 @@ brk :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
 
     cpu.status += {.Break}
 
-    irq_hi := cpu.memory[0xFFFE]
-    irq_lo := cpu.memory[0xFFFF]
+    irq_hi := read_memory(cpu, 0xFFFE)
+    irq_lo := read_memory(cpu, 0xFFFF)
 
     irq_vector := u8_to_u16(irq_hi, irq_lo)
     cpu.program_counter = irq_vector
@@ -296,11 +351,11 @@ brk :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
 }
 
 lda :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
-    hi, lo := read_memory(addressing_mode, cpu)
+    hi, lo := read_address(addressing_mode, cpu)
 
     new_a := hi
     if addressing_mode != .Immediate {
-        new_a = cpu.memory[u8_to_u16(hi, lo)]
+        new_a = read_memory(cpu, u8_to_u16(hi, lo))
     }
 
     set_accumulator(cpu, new_a)
@@ -330,11 +385,11 @@ lda :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
 }
 
 ldx :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
-    hi, lo := read_memory(addressing_mode, cpu)
+    hi, lo := read_address(addressing_mode, cpu)
 
     new_x := hi
     if addressing_mode != .Immediate {
-        new_x = cpu.memory[u8_to_u16(hi, lo)]
+        new_x = read_memory(cpu, u8_to_u16(hi, lo))
     }
 
     set_register_x(cpu, new_x)
@@ -358,11 +413,11 @@ ldx :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
 }
 
 ldy :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
-    hi, lo := read_memory(addressing_mode, cpu)
+    hi, lo := read_address(addressing_mode, cpu)
 
     new_y := hi
     if addressing_mode != .Immediate {
-        new_y = cpu.memory[u8_to_u16(hi, lo)]
+        new_y = read_memory(cpu, u8_to_u16(hi, lo))
     }
 
     set_register_y(cpu, new_y)
@@ -386,10 +441,10 @@ ldy :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
 }
 
 stx :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
-    addr_hi, addr_lo := read_memory(addressing_mode, cpu)
+    addr_hi, addr_lo := read_address(addressing_mode, cpu)
     address: u16 = u8_to_u16(addr_hi, addr_lo)
 
-    cpu.memory[address] = cpu.register_x
+    write_memory(cpu, address, cpu.register_x)
     cpu_fetch(cpu)
 
     #partial switch addressing_mode {
@@ -405,10 +460,10 @@ stx :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
 }
 
 sty :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
-    addr_hi, addr_lo := read_memory(addressing_mode, cpu)
+    addr_hi, addr_lo := read_address(addressing_mode, cpu)
     address: u16 = u8_to_u16(addr_hi, addr_lo)
 
-    cpu.memory[address] = cpu.register_y
+    write_memory(cpu, address, cpu.register_y)
     cpu_fetch(cpu)
 
     #partial switch addressing_mode {
@@ -424,10 +479,10 @@ sty :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
 }
 
 sta :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
-    addr_hi, addr_lo := read_memory(addressing_mode, cpu)
+    addr_hi, addr_lo := read_address(addressing_mode, cpu)
     address: u16 = u8_to_u16(addr_hi, addr_lo)
 
-    cpu.memory[address] = cpu.accumulator
+    write_memory(cpu, address, cpu.accumulator)
     cpu_fetch(cpu)
 
     #partial switch addressing_mode {
@@ -451,7 +506,7 @@ sta :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
 }
 
 jmp :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
-    jump_hi, jump_lo := read_memory(addressing_mode, cpu)
+    jump_hi, jump_lo := read_address(addressing_mode, cpu)
     cpu.program_counter = u8_to_u16(jump_hi, jump_lo)
 
     #partial switch addressing_mode {
@@ -463,7 +518,7 @@ jmp :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
 }
 
 jsr :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
-    addr_hi, addr_lo := read_memory(addressing_mode, cpu)
+    addr_hi, addr_lo := read_address(addressing_mode, cpu)
     address := u8_to_u16(addr_hi, addr_lo)
 
     // The return point of the subroutine will be the address of the LSB, 
@@ -504,10 +559,10 @@ rti :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
 }
 
 bit :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
-    hi, lo := read_memory(addressing_mode, cpu)
+    hi, lo := read_address(addressing_mode, cpu)
     addr := u8_to_u16(hi, lo)
 
-    test_val := cpu.memory[addr]
+    test_val := read_memory(cpu, addr)
 
     result := test_val & cpu.accumulator
     if result == 0 {
@@ -543,10 +598,10 @@ bit :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
 and :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
     test_val: u8 = 0
 
-    hi, lo := read_memory(addressing_mode, cpu)
+    hi, lo := read_address(addressing_mode, cpu)
     addr := u8_to_u16(hi, lo)
 
-    test_val = cpu.memory[addr]
+    test_val = read_memory(cpu, addr)
     if addressing_mode == .Immediate {
         test_val = hi
     }
@@ -580,10 +635,10 @@ and :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
 adc :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
     add_val: u8 = 0
 
-    hi, lo := read_memory(addressing_mode, cpu)
+    hi, lo := read_address(addressing_mode, cpu)
     addr := u8_to_u16(hi, lo)
 
-    add_val = cpu.memory[addr]
+    add_val = read_memory(cpu, addr)
     if addressing_mode == .Immediate {
         add_val = hi
     }
@@ -638,10 +693,10 @@ adc :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
 sbc :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
     add_val: u8 = 0
 
-    hi, lo := read_memory(addressing_mode, cpu)
+    hi, lo := read_address(addressing_mode, cpu)
     addr := u8_to_u16(hi, lo)
 
-    add_val = cpu.memory[addr]
+    add_val = read_memory(cpu, addr)
     if addressing_mode == .Immediate {
         add_val = hi
     }
@@ -696,10 +751,10 @@ sbc :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
 ora :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
     test_val: u8 = 0
 
-    hi, lo := read_memory(addressing_mode, cpu)
+    hi, lo := read_address(addressing_mode, cpu)
     addr := u8_to_u16(hi, lo)
 
-    test_val = cpu.memory[addr]
+    test_val = read_memory(cpu, addr)
     if addressing_mode == .Immediate {
         test_val = hi
     }
@@ -733,10 +788,10 @@ ora :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
 eor :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
     test_val: u8 = 0
 
-    hi, lo := read_memory(addressing_mode, cpu)
+    hi, lo := read_address(addressing_mode, cpu)
     addr := u8_to_u16(hi, lo)
 
-    test_val = cpu.memory[addr]
+    test_val = read_memory(cpu, addr)
     if addressing_mode == .Immediate {
         test_val = hi
     }
@@ -768,7 +823,7 @@ eor :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
 }
 
 bcs :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
-    offset_hi, offset_lo := read_memory(addressing_mode, cpu)
+    offset_hi, offset_lo := read_address(addressing_mode, cpu)
     pc_move := u8_to_u16(offset_hi, offset_lo)
 
     if .Carry in cpu.status {
@@ -788,7 +843,7 @@ bcs :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
 }
 
 bvs :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
-    offset_hi, offset_lo := read_memory(addressing_mode, cpu)
+    offset_hi, offset_lo := read_address(addressing_mode, cpu)
     pc_move := u8_to_u16(offset_hi, offset_lo)
 
     if .Overflow in cpu.status {
@@ -808,7 +863,7 @@ bvs :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
 }
 
 bvc :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
-    offset_hi, offset_lo := read_memory(addressing_mode, cpu)
+    offset_hi, offset_lo := read_address(addressing_mode, cpu)
     pc_move := u8_to_u16(offset_hi, offset_lo)
 
     if !(.Overflow in cpu.status) {
@@ -828,7 +883,7 @@ bvc :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
 }
 
 bcc :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
-    offset_hi, offset_lo := read_memory(addressing_mode, cpu)
+    offset_hi, offset_lo := read_address(addressing_mode, cpu)
     pc_move := u8_to_u16(offset_hi, offset_lo)
 
     if !(.Carry in cpu.status) {
@@ -848,7 +903,7 @@ bcc :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
 }
 
 beq :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
-    offset_hi, offset_lo := read_memory(addressing_mode, cpu)
+    offset_hi, offset_lo := read_address(addressing_mode, cpu)
     pc_move := u8_to_u16(offset_hi, offset_lo)
 
     if .Zero in cpu.status {
@@ -868,7 +923,7 @@ beq :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
 }
 
 bne :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
-    offset_hi, offset_lo := read_memory(addressing_mode, cpu)
+    offset_hi, offset_lo := read_address(addressing_mode, cpu)
     pc_move := u8_to_u16(offset_hi, offset_lo)
 
     if !(.Zero in cpu.status) {
@@ -888,7 +943,7 @@ bne :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
 }
 
 bmi :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
-    offset_hi, offset_lo := read_memory(addressing_mode, cpu)
+    offset_hi, offset_lo := read_address(addressing_mode, cpu)
     pc_move := u8_to_u16(offset_hi, offset_lo)
 
     if .Negative in cpu.status {
@@ -908,7 +963,7 @@ bmi :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
 }
 
 bpl :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
-    offset_hi, offset_lo := read_memory(addressing_mode, cpu)
+    offset_hi, offset_lo := read_address(addressing_mode, cpu)
     pc_move := u8_to_u16(offset_hi, offset_lo)
 
     if !(.Negative in cpu.status) {
@@ -963,9 +1018,9 @@ php :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
 }
 
 cmp :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
-    read_hi, read_lo := read_memory(addressing_mode, cpu)
+    read_hi, read_lo := read_address(addressing_mode, cpu)
 
-    test_val := cpu.memory[u8_to_u16(read_hi, read_lo)]
+    test_val := read_memory(cpu, u8_to_u16(read_hi, read_lo))
     if addressing_mode == Addressing_Mode.Immediate {
         test_val = read_hi
     }
@@ -1015,9 +1070,9 @@ cmp :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
 }
 
 cpy :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
-    read_hi, read_lo := read_memory(addressing_mode, cpu)
+    read_hi, read_lo := read_address(addressing_mode, cpu)
 
-    test_val := cpu.memory[u8_to_u16(read_hi, read_lo)]
+    test_val := read_memory(cpu, u8_to_u16(read_hi, read_lo))
     if addressing_mode == Addressing_Mode.Immediate {
         test_val = read_hi
     }
@@ -1057,9 +1112,9 @@ cpy :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
 }
 
 cpx :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
-    read_hi, read_lo := read_memory(addressing_mode, cpu)
+    read_hi, read_lo := read_address(addressing_mode, cpu)
 
-    test_val := cpu.memory[u8_to_u16(read_hi, read_lo)]
+    test_val := read_memory(cpu, u8_to_u16(read_hi, read_lo))
     if addressing_mode == Addressing_Mode.Immediate {
         test_val = read_hi
     }
@@ -1160,10 +1215,10 @@ dey :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
 }
 
 dec :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
-    hi, lo := read_memory(addressing_mode, cpu)
+    hi, lo := read_address(addressing_mode, cpu)
 
     addr := u8_to_u16(hi, lo)
-    set_memory(cpu, cpu.memory[addr] - 1, addr)
+    set_memory(cpu, read_memory(cpu, addr) - 1, addr)
 
     cpu_fetch(cpu)
 
@@ -1188,10 +1243,10 @@ iny :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
 }
 
 inc :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
-    hi, lo := read_memory(addressing_mode, cpu)
+    hi, lo := read_address(addressing_mode, cpu)
 
     addr := u8_to_u16(hi, lo)
-    set_memory(cpu, cpu.memory[addr] + 1, addr)
+    set_memory(cpu, read_memory(cpu, addr) + 1, addr)
 
     cpu_fetch(cpu)
 
@@ -1263,10 +1318,10 @@ lsr :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
             cpu.status -= {.Carry}
         }
     } else {
-        hi, lo := read_memory(addressing_mode, cpu)
+        hi, lo := read_address(addressing_mode, cpu)
 
         addr := u8_to_u16(hi, lo)
-        memory := cpu.memory[addr]
+        memory := read_memory(cpu, addr)
 
         result := memory >> 1
 
@@ -1288,7 +1343,7 @@ lsr :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
             cpu.status -= {.Carry}
         }
 
-        cpu.memory[addr] = result
+        write_memory(cpu, addr, result)
     }
 
     cpu_fetch(cpu)
@@ -1320,10 +1375,10 @@ asl :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
             cpu.status -= {.Carry}
         }
     } else {
-        hi, lo := read_memory(addressing_mode, cpu)
+        hi, lo := read_address(addressing_mode, cpu)
 
         addr := u8_to_u16(hi, lo)
-        memory := cpu.memory[addr]
+        memory := read_memory(cpu, addr)
 
         result := memory << 1
 
@@ -1345,7 +1400,7 @@ asl :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
             cpu.status -= {.Carry}
         }
 
-        cpu.memory[addr] = result
+        write_memory(cpu, addr, result)
     }
 
     cpu_fetch(cpu)
@@ -1380,10 +1435,10 @@ ror :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
             cpu.status -= {.Carry}
         }
     } else {
-        hi, lo := read_memory(addressing_mode, cpu)
+        hi, lo := read_address(addressing_mode, cpu)
 
         addr := u8_to_u16(hi, lo)
-        memory := cpu.memory[addr]
+        memory := read_memory(cpu, addr)
 
         result :=
             ((memory >> 1) & 0b01111111) |
@@ -1407,7 +1462,7 @@ ror :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
             cpu.status -= {.Carry}
         }
 
-        cpu.memory[addr] = result
+        write_memory(cpu, addr, result)
     }
 
     cpu_fetch(cpu)
@@ -1442,10 +1497,10 @@ rol :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
             cpu.status -= {.Carry}
         }
     } else {
-        hi, lo := read_memory(addressing_mode, cpu)
+        hi, lo := read_address(addressing_mode, cpu)
 
         addr := u8_to_u16(hi, lo)
-        memory := cpu.memory[addr]
+        memory := read_memory(cpu, addr)
 
         result :=
             ((memory << 1) & 0b11111110) | transmute(u8)(cpu.status & {.Carry})
@@ -1468,7 +1523,7 @@ rol :: proc(cpu: ^CPU, addressing_mode: Addressing_Mode) -> u8 {
             cpu.status -= {.Carry}
         }
 
-        cpu.memory[addr] = result
+        write_memory(cpu, addr, result)
     }
 
     cpu_fetch(cpu)
