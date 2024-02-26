@@ -3,15 +3,15 @@ package madnes
 import "core:fmt"
 import "core:os"
 
-import "emulator"
 import "console"
+import "emulator"
 import "rom_formats"
 
 main :: proc() {
     args := os.args
 
     if len(args) < 2 {
-        fmt.printf("Please specify a ROM file \n");
+        fmt.printf("Please specify a ROM file \n")
         os.exit(-1)
     }
 
@@ -21,18 +21,33 @@ main :: proc() {
         os.exit(-1)
     }
 
-    test_rom, err := rom_formats.parse_ines_file(nestest_file)
-    defer rom_formats.delete_ines_file(&test_rom)
+    test_rom, err := rom_formats.load_rom(
+        nestest_file,
+        rom_formats.Target_Format.INES,
+    )
 
-    if err != .None {
+    if rom_formats.error_occured(err) {
         fmt.printf("An error occured while parsing an INES file \n")
+        fmt.println("Err: ", err)
         os.exit(-1)
     }
 
     emu := emulator.init_emulator()
-    console.load_prg_rom(&emu.console, test_rom.prg_rom)
 
-    emu.console.cpu.program_counter = console.u8_to_u16(emu.console.cpu.memory[0xFFFC], emu.console.cpu.memory[0xFFFD])
+    rom_formats.load_to_console(&emu.console, &test_rom)
+
+    mapper, mapper_err := rom_formats.init_mapper(&test_rom)
+    if rom_formats.error_occured(err) {
+        fmt.println("An error occured while preparing the mapper")
+        fmt.println(err)
+        os.exit(-1)
+    }
+    emu.console.memory_bus.mapper = mapper
+
+    emu.console.cpu.program_counter = console.u8_to_u16(
+        emu.console.cpu.memory[0xFFFC],
+        emu.console.cpu.memory[0xFFFD],
+    )
 
     emulator.run_emulator(&emu)
 }

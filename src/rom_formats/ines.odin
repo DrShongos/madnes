@@ -2,6 +2,9 @@ package rom_formats
 
 import "core:mem"
 
+import "../console"
+import "../console/mapper"
+
 INES_FILE_HEADER :: [4]u8{0x4E, 0x45, 0x53, 0x1A}
 
 INES_PRG_ROM_UNIT :: 16384
@@ -115,4 +118,18 @@ delete_ines_file :: proc(file: ^INES_Format) {
     if file.chr_rom != nil {
         delete(file.chr_rom)
     }
+}
+
+ines_init_mapper :: proc(
+    ines_format: ^INES_Format,
+) -> (
+    console.Mapper,
+    ROM_Error,
+) {
+    switch ines_format.header.mapper {
+    case 0:
+        return mapper.init_nrom(ines_format.prg_rom, ines_format.chr_rom), nil
+    }
+
+    return nil, .Unknown_Mapper
 }

@@ -144,11 +144,11 @@ read_address :: proc(mode: Addressing_Mode, cpu: ^CPU) -> (u8, u8) {
         // This statement exists because the sign gets removed 
         // upon conversion to an unsigned integer
         //if offset & 0x80 != 0 {
-            // This will probably cause a bug later
+        // This will probably cause a bug later
         //    offset_pc += u16(offset)
         //} else {
-            offset_pc += u16(offset)
-            //offset_pc -= 1
+        offset_pc += u16(offset)
+        //offset_pc -= 1
         //}
 
         return u16_to_u8(offset_pc)
@@ -221,13 +221,13 @@ read_memory :: proc(cpu: ^CPU, addr: u16) -> u8 {
     if addr >= 0x1800 && addr <= 0x1FFF {
         return cpu.memory[addr - 0x1800]
     }
-    
+
     // TODO: PPU Registers
     // TODO: Mapper Registers
     // TODO: IO Registers
     // TODO: APU Registers
 
-    return cpu.memory[addr]
+    return mapper_read_memory(&cpu.memory_bus.mapper, addr)
 }
 
 // Writes to the byte placed in memory.
@@ -246,16 +246,16 @@ write_memory :: proc(cpu: ^CPU, addr: u16, val: u8) {
     }
 
     if addr >= 0x1800 && addr <= 0x1FFF {
-        cpu.memory[addr - 0x1800] = val 
+        cpu.memory[addr - 0x1800] = val
         return
     }
-    
+
     // TODO: PPU Registers
     // TODO: Mapper Registers
     // TODO: IO Registers
     // TODO: APU Registers
 
-    cpu.memory[addr] = val
+    mapper_write_memory(&cpu.memory_bus.mapper, addr, val)
 }
 
 @(private)
