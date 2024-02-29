@@ -43,10 +43,15 @@ main :: proc() {
         os.exit(-1)
     }
     emu.console.memory_bus.mapper = mapper
+    emu.console.cpu.memory_bus = &emu.console.memory_bus
+    //fmt.println(mapper)
 
+    // TODO because I forgot: THIS SHOULD BE READ FROM THE MAPPER INSTEAD!!!!!!!!!!!!!!!!!
     emu.console.cpu.program_counter = console.u8_to_u16(
-        emu.console.cpu.memory[0xFFFC],
-        emu.console.cpu.memory[0xFFFD],
+        //emu.console.cpu.memory[0xFFFC],
+        //emu.console.cpu.memory[0xFFFD],
+        console.read_memory(&emu.console.cpu, 0xFFFC),
+        console.read_memory(&emu.console.cpu, 0xFFFD),
     )
 
     emulator.run_emulator(&emu)

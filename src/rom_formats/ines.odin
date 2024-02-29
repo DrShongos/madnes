@@ -1,6 +1,7 @@
 package rom_formats
 
 import "core:mem"
+import "core:fmt"
 
 import "../console"
 import "../console/mapper"

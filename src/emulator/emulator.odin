@@ -1,7 +1,9 @@
 package emulator
 
 import "../console"
+import "../console/mapper"
 import "vendor:sdl2"
+import "core:fmt"
 
 Emulator :: struct {
     window:  ^sdl2.Window,

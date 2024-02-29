@@ -1,6 +1,8 @@
 package rom_formats
 
+import "core:fmt"
 import "../console"
+import "../console/mapper"
 
 // TODO: More ROM Formats
 ROM_Format :: union {
@@ -56,9 +58,10 @@ load_to_console :: proc(emulated_console: ^console.Console, format: ^ROM_Format)
 }
 
 init_mapper :: proc(rom_format: ^ROM_Format) -> (console.Mapper, Loading_Error) {
-    switch format in rom_format {
+    switch &format in rom_format {
         case INES_Format:
             return ines_init_mapper(&format)
+
     }
 
     return nil, ROM_Error.Unknown_Format

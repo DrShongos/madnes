@@ -176,16 +176,16 @@ read_address :: proc(mode: Addressing_Mode, cpu: ^CPU) -> (u8, u8) {
 
         hi_address := u8_to_u16(target_hi, target_lo)
 
-        real_hi := cpu.memory[hi_address]
-        real_lo := cpu.memory[hi_address + 1]
+        real_hi := read_memory(cpu, hi_address)
+        real_lo := read_memory(cpu, hi_address + 1)
 
         // Handle a hardware bug where attempting to fetch the indirect address from the end of a page causes the memory to wrap around
         if hi_address & 0x00FF == 0x00FF {
             // According to the results from the nestest rom these two have to be swapped around in this edge case despite every documentation i've seen not specyfying that.
             // That, or I simply have zero reading comprehension
             // I have literally zero idea if it will work on any other program and I don't want to know
-            real_lo = cpu.memory[u8_to_u16(0x00, target_lo)]
-            real_hi = cpu.memory[hi_address]
+            real_lo = read_memory(cpu, u8_to_u16(0x00, target_lo))
+            real_hi = read_memory(cpu, hi_address)
         }
 
 
