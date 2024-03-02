@@ -1,33 +1,31 @@
 package mapper
 
-import "core:slice"
 import "core:fmt"
+import "core:slice"
 
 NROM :: struct {
     using mapper_interface: Mapper_Interface(NROM),
-
-    prg_rom: []u8,
-    prg_ram: [8092]u8,
-
-    chr_rom: [0x2000]u8,
+    prg_rom:                []u8,
+    prg_ram:                [8092]u8,
+    chr_rom:                [0x2000]u8,
 }
 
 init_nrom :: proc(prg_rom: []u8, chr_rom: []u8) -> NROM {
     nrom := NROM{}
     nrom.prg_rom = make([]u8, len(prg_rom))
- 
-    copy(nrom.prg_rom, prg_rom[:]) 
+
+    copy(nrom.prg_rom, prg_rom[:])
 
     if chr_rom != nil {
         copy(nrom.chr_rom[:], chr_rom)
     }
 
-    nrom.read_memory = nrom_read_memory 
+    nrom.read_memory = nrom_read_memory
     nrom.write_memory = nrom_write_memory
 
     return nrom
 }
- 
+
 //@(private)
 nrom_read_memory :: proc(self: ^NROM, addr: u16) -> u8 {
     if addr >= 0x6000 && addr <= 0x7fff {

@@ -1,7 +1,7 @@
 package console
 
-import "mapper"
 import "core:fmt"
+import "mapper"
 
 Mapper :: union {
     mapper.NROM,

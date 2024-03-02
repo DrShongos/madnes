@@ -2,19 +2,26 @@ package emulator
 
 import "../console"
 import "../console/mapper"
-import "vendor:sdl2"
 import "core:fmt"
+import "vendor:sdl2"
 
 Emulator :: struct {
-    window:  ^sdl2.Window,
-    console: console.Console,
-    running: bool,
+    window:       ^sdl2.Window,
+    // Will be replaced with an OpenGL Renderer
+    sdl_renderer: ^sdl2.Renderer,
+    console:      console.Console,
+    running:      bool,
 }
 
 init_emulator :: proc() -> Emulator {
     sdl2.Init({.VIDEO, .EVENTS, .AUDIO})
     emulator := Emulator{}
-    emulator.window = sdl2.CreateWindow("madnes", 0, 0, 1280, 720, {})
+    emulator.window = sdl2.CreateWindow("madnes", 0, 0, 1065, 720, {})
+    emulator.sdl_renderer = sdl2.CreateRenderer(
+        emulator.window,
+        0,
+        {.SOFTWARE},
+    )
     emulator.console = console.init_console()
     emulator.running = true
 
@@ -31,5 +38,9 @@ run_emulator :: proc(emulator: ^Emulator) {
             }
         }
         console.console_tick(&emulator.console)
+
+        sdl2.RenderClear(emulator.sdl_renderer)
+
+        sdl2.RenderPresent(emulator.sdl_renderer)
     }
 }

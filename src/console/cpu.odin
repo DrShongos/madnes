@@ -1,5 +1,6 @@
 package console
 
+import "core:fmt"
 import "core:math"
 
 PC_NESTEST_START :: 0xC000
@@ -32,7 +33,6 @@ CPU :: struct {
     stack_top:       u8,
     program_counter: u16,
     memory:          [0xFFFF + 1]u8,
-    memory_bus:      ^Memory_Bus,
 
     // Opcode execution
     cycle:           u8,
@@ -63,28 +63,30 @@ init_cpu :: proc() -> CPU {
 }
 
 /// Increments the program counter and fetches the next byte
-cpu_fetch :: proc(cpu: ^CPU) -> u8 {
+cpu_fetch :: proc(cpu: ^CPU, console: ^Console) -> u8 {
     cpu.program_counter += 1
-    return read_memory(cpu, cpu.program_counter)
+    return read_memory(cpu, console, cpu.program_counter)
 }
 
 stack_push :: proc(cpu: ^CPU, val: u8) {
-    write_memory(cpu, u16(cpu.stack_top), val)
-    //cpu.memory[cpu.stack_top] = val
+    // No need to use the `read_memory` functions, since
+    // The data will be stored in the internal memory anyways
+    // And no mirroring occurs
+    cpu.memory[cpu.stack_top] = val
     cpu.stack_top -= 1
 }
 
 stack_pop :: proc(cpu: ^CPU) -> u8 {
     cpu.stack_top += 1
-    return read_memory(cpu, u16(cpu.stack_top))
-    //return cpu.memory[cpu.stack_top] 
+    // Ditto
+    return cpu.memory[cpu.stack_top]
 }
 
-run_cycle :: proc(cpu: ^CPU) {
+run_cycle :: proc(cpu: ^CPU, console: ^Console) {
     cpu.page_crossed = false
-    code := read_memory(cpu, cpu.program_counter)
+    code := read_memory(cpu, console, cpu.program_counter)
     opcode := cpu.opcode_table[code]
-    cpu.cycle = execute_opcode(&opcode, cpu)
+    cpu.cycle = execute_opcode(&opcode, cpu, console)
     if cpu.page_crossed {
         cpu.cycle += 1
     }
