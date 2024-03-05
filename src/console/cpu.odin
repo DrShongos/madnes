@@ -39,6 +39,7 @@ CPU :: struct {
     opcode_table:    [OPCODE_TABLE_SIZE]Opcode,
     page_crossed:    bool,
     executed_cycles: u64,
+    suspended:       bool,
 }
 
 init_cpu :: proc() -> CPU {
@@ -53,6 +54,7 @@ init_cpu :: proc() -> CPU {
         opcode_table    = create_opcode_table(),
         page_crossed    = false,
         executed_cycles = 7,
+        suspended       = false,
     }
 
     for i := 0; i < 0xFFFF; i += 1 {
@@ -83,6 +85,11 @@ stack_pop :: proc(cpu: ^CPU) -> u8 {
 }
 
 run_cycle :: proc(cpu: ^CPU, console: ^Console) {
+    if cpu.suspended {
+        cpu.cycle = 2
+        cpu.executed_cycles += u64(cpu.cycle)
+        return
+    }
     cpu.page_crossed = false
     code := read_memory(cpu, console, cpu.program_counter)
     opcode := cpu.opcode_table[code]

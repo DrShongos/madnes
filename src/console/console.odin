@@ -3,6 +3,11 @@ package console
 import "core:fmt"
 import "core:os"
 
+Interrupt :: enum {
+    IRQ,
+    NMI,
+}
+
 Console :: struct {
     cpu:    CPU,
     ppu:    PPU,
@@ -12,7 +17,7 @@ Console :: struct {
 init_console :: proc() -> Console {
     console := Console{}
     console.cpu = init_cpu()
-    console.ppu = init_ppu()
+    console.ppu = PPU{}
 
     return console
 }
@@ -21,6 +26,28 @@ console_tick :: proc(console: ^Console) {
     run_cycle(&console.cpu, console)
     if console.cpu.cycle == 255 {
         os.exit(-1)
+    }
+
+    if !console.ppu.initialized && console.cpu.executed_cycles >= 29658 {
+        init_ppu(&console.ppu)
+    }
+}
+
+trigger_interrupt :: proc(console: ^Console, interrupt: Interrupt) {
+    switch interrupt {
+    case Interrupt.IRQ:
+        prev_pc_hi, prev_pc_low := u16_to_u8(console.cpu.program_counter)
+        stack_push(&console.cpu, prev_pc_low)
+        stack_push(&console.cpu, prev_pc_hi)
+
+        console.cpu.status += {.Break}
+
+        irq_hi := read_memory(&console.cpu, console, 0xFFFE)
+        irq_lo := read_memory(&console.cpu, console, 0xFFFF)
+
+        irq_vector := u8_to_u16(irq_hi, irq_lo)
+        console.cpu.program_counter = irq_vector
+    case Interrupt.NMI:
     }
 }
 

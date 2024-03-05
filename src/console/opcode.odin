@@ -169,17 +169,13 @@ read_address :: proc(
     case .Zero_Page_Y:
         return cpu_fetch(cpu, console) + cpu.register_y, 0
     case .Relative:
-        offset := i8(cpu_fetch(cpu, console))
+        offset := u16(cpu_fetch(cpu, console))
         offset_pc := cpu.program_counter
-        // This statement exists because the sign gets removed 
-        // upon conversion to an unsigned integer
-        //if offset & 0x80 != 0 {
-        // This will probably cause a bug later
-        //    offset_pc += u16(offset)
-        //} else {
-        offset_pc += u16(offset)
-        //offset_pc -= 1
-        //}
+
+        if offset & 0x80 != 0 {
+            offset |= 0xFF00
+        }
+        offset_pc += offset
 
         return u16_to_u8(offset_pc)
     case .Absolute:
@@ -255,7 +251,16 @@ read_memory :: proc(cpu: ^CPU, console: ^Console, addr: u16) -> u8 {
         return cpu.memory[addr - 0x1800]
     }
 
-    // TODO: PPU Registers
+    // PPU Registers
+    if addr >= 0x2000 && addr <= 0x2007 {
+        return ppu_read_registers(&console.ppu, addr)
+    }
+
+    // PPU Mirrors
+    if addr >= 0x2008 && addr <= 0x3fff {
+        return ppu_read_registers(&console.ppu, 0x2000 + (addr % 8))
+    }
+
     // TODO: Mapper Registers
     // TODO: IO Registers
     // TODO: APU Registers
@@ -283,7 +288,17 @@ write_memory :: proc(cpu: ^CPU, console: ^Console, addr: u16, val: u8) {
         return
     }
 
-    // TODO: PPU Registers
+    // PPU Registers
+    if addr >= 0x2000 && addr <= 0x2007 {
+        ppu_write_registers(&console.ppu, console, addr, val)
+        return
+    }
+
+    // PPU Mirrors
+    if addr >= 0x2008 && addr <= 0x3fff {
+        ppu_write_registers(&console.ppu, console, 0x2000 + (addr % 8), val)
+        return
+    }
     // TODO: Mapper Registers
     // TODO: IO Registers
     // TODO: APU Registers
@@ -377,17 +392,7 @@ brk :: proc(
     console: ^Console,
     addressing_mode: Addressing_Mode,
 ) -> u8 {
-    prev_pc_hi, prev_pc_low := u16_to_u8(cpu.program_counter)
-    stack_push(cpu, prev_pc_low)
-    stack_push(cpu, prev_pc_hi)
-
-    cpu.status += {.Break}
-
-    irq_hi := read_memory(cpu, console, 0xFFFE)
-    irq_lo := read_memory(cpu, console, 0xFFFF)
-
-    irq_vector := u8_to_u16(irq_hi, irq_lo)
-    cpu.program_counter = irq_vector
+    trigger_interrupt(console, Interrupt.IRQ)
     return 7
 }
 
