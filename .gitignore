@@ -1,0 +1,4 @@
+build/
+*.nes
+.cache/
+.helix/
