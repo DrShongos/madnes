@@ -1,5 +1,8 @@
 package console
 
+import "core:fmt"
+import "core:os"
+
 DEFAULT_STATUS: u8 : 0x24
 
 CPU_MEM_SIZE: u16 : 0xffff
@@ -37,6 +40,12 @@ CPU :: struct {
     stack_top:       u8,
     program_counter: u16,
     memory:          [CPU_MEM_SIZE]u8,
+
+    // Instruction info
+
+    /// The amount of cycles used to perform the instruction
+    cycle:           u8,
+    instruction_set: [INSTRUCTION_SET_SIZE]Instruction,
 }
 
 @(private)
@@ -57,7 +66,11 @@ cpu_new :: proc() -> CPU {
         reg_y           = 0,
         stack_top       = STACK_TOP,
         program_counter = PROGRAM_ROM_MIRROR,
+        cycle           = 0,
+        instruction_set = instruction_set_create(),
     }
+
+    mem_reset(&cpu)
 
     return cpu
 }
@@ -101,7 +114,7 @@ cpu_mem_read :: proc(cpu: ^CPU, address: u16) -> u8 {
     }
 
     // TODO: Read memory from the other parts of the console (BUS)
-    return 0
+    return cpu.memory[address]
 }
 
 cpu_mem_write :: proc(cpu: ^CPU, address: u16, value: u8) {
@@ -125,12 +138,48 @@ cpu_mem_write :: proc(cpu: ^CPU, address: u16, value: u8) {
     }
 
     // TODO: Write to the other parts of the console
+    cpu.memory[address] = value
 }
 
 cpu_fetch :: proc(cpu: ^CPU) -> u8 {
     cpu.program_counter += 1
 
     return cpu_mem_read(cpu, cpu.program_counter)
+}
+
+cpu_instruction_trace :: proc(cpu: ^CPU, instruction: ^Instruction) {
+    // Address, Opcode
+    fmt.printf(
+        "%x %x ",
+        cpu.program_counter,
+        cpu_mem_read(cpu, cpu.program_counter),
+    )
+
+    // TODO: Addressing Mode
+    //
+    // Opcode name
+    fmt.printf(" %s ", instruction.name)
+
+    // CPU values pre-execution
+    fmt.printf(
+        "            A:%x X:%x Y:%x P:%x, SP:%x\n",
+        cpu.accumulator,
+        cpu.reg_x,
+        cpu.reg_y,
+        transmute(u8)cpu.status,
+        cpu.stack_top,
+    )
+}
+
+cpu_tick :: proc(cpu: ^CPU) {
+    opcode := cpu_mem_read(cpu, cpu.program_counter)
+    instruction := cpu.instruction_set[opcode]
+
+    cpu_instruction_trace(cpu, &instruction)
+    cpu.cycle = instruction.action(cpu)
+    if cpu.cycle == 255 {
+        os.exit(-1)
+    }
 }
 
 stack_push :: proc(cpu: ^CPU, value: u8) {
