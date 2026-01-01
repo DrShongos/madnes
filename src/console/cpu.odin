@@ -43,9 +43,15 @@ CPU :: struct {
 
     // Instruction info
 
-    /// The amount of cycles used to perform the instruction
+    // The amount of cycles used to perform the instruction
     cycle:           u8,
     instruction_set: [INSTRUCTION_SET_SIZE]Instruction,
+
+    // This value specifies whether during accessing an indexed address
+    // The calculation caused the high byte to change, forcing it to start fetching again.
+    // Used to add an additional cycle during the execution of an instruction,
+    // gets reset on the next tick.
+    page_crossed:    bool,
 }
 
 @(private)
@@ -68,6 +74,7 @@ cpu_new :: proc() -> CPU {
         program_counter = PROGRAM_ROM_MIRROR,
         cycle           = 0,
         instruction_set = instruction_set_create(),
+        page_crossed    = false,
     }
 
     mem_reset(&cpu)
@@ -172,11 +179,20 @@ cpu_instruction_trace :: proc(cpu: ^CPU, instruction: ^Instruction) {
 }
 
 cpu_tick :: proc(cpu: ^CPU) {
+    cpu.page_crossed = false
     opcode := cpu_mem_read(cpu, cpu.program_counter)
     instruction := cpu.instruction_set[opcode]
 
     cpu_instruction_trace(cpu, &instruction)
     cpu.cycle = instruction.action(cpu)
+
+    // Page crossing forces the CPU to re-calculate the instruction's argument,
+    // Spending an additional cycle on doing so.
+    if cpu.page_crossed {
+        cpu.cycle += 1
+    }
+
+    // Force the emulator to shutdown if an unsupported opcode gets executed.
     if cpu.cycle == 255 {
         os.exit(-1)
     }

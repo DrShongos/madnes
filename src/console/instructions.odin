@@ -2,6 +2,8 @@ package console
 
 import "core:fmt"
 
+import "core:math"
+
 //////////////////////////////////////////////////////////////////
 ///              HELPER FUNCTIONS                             ///
 ////////////////////////////////////////////////////////////////
@@ -21,11 +23,38 @@ status_check_negative :: proc(cpu: ^CPU, value: u8) {
     }
 }
 
+fetch_zero_page :: proc(cpu: ^CPU) -> u16 {
+    lo := cpu_fetch(cpu)
+
+    return bytes_to_address(0x00, lo)
+}
+
 fetch_absolute :: proc(cpu: ^CPU) -> u16 {
     hi := cpu_fetch(cpu)
     lo := cpu_fetch(cpu)
 
     return bytes_to_address(hi, lo)
+}
+
+fetch_zero_page_indexed :: proc(cpu: ^CPU, register: u8) -> u16 {
+    lo := cpu_fetch(cpu)
+
+    return bytes_to_address(0x00, lo + register)
+}
+
+fetch_absolute_indexed :: proc(cpu: ^CPU, register: u8) -> u16 {
+    hi := cpu_fetch(cpu)
+    lo := cpu_fetch(cpu)
+
+    // Check whether the calculation will cause the high byte to change,
+    // triggering a page cross.
+    new_lo := lo + register
+    if new_lo < lo {
+        hi += 0x01
+        cpu.page_crossed = true
+    }
+
+    return bytes_to_address(hi, new_lo)
 }
 
 //////////////////////////////////////////////////////////////////
@@ -74,4 +103,32 @@ ldx_immediate: Instruction_Code : proc(cpu: ^CPU) -> u8 {
     ldx(cpu, arg)
 
     return 2
+}
+
+ldx_zero_page: Instruction_Code : proc(cpu: ^CPU) -> u8 {
+    arg := cpu_mem_read(cpu, fetch_zero_page(cpu))
+    ldx(cpu, arg)
+
+    return 3
+}
+
+ldx_zero_page_y: Instruction_Code : proc(cpu: ^CPU) -> u8 {
+    arg := cpu_mem_read(cpu, fetch_zero_page_indexed(cpu, cpu.reg_y))
+    ldx(cpu, arg)
+
+    return 4
+}
+
+ldx_absolute: Instruction_Code : proc(cpu: ^CPU) -> u8 {
+    arg := cpu_mem_read(cpu, fetch_absolute(cpu))
+    ldx(cpu, arg)
+
+    return 4
+}
+
+ldx_absolute_y: Instruction_Code : proc(cpu: ^CPU) -> u8 {
+    arg := cpu_mem_read(cpu, fetch_absolute_indexed(cpu, cpu.reg_y))
+    ldx(cpu, arg)
+
+    return 4
 }
