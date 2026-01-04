@@ -47,11 +47,8 @@ CPU :: struct {
     cycle:           u8,
     instruction_set: [INSTRUCTION_SET_SIZE]Instruction,
 
-    // This value specifies whether during accessing an indexed address
-    // The calculation caused the high byte to change, forcing it to start fetching again.
-    // Used to add an additional cycle during the execution of an instruction,
-    // gets reset on the next tick.
-    page_crossed:    bool,
+    // Debug
+    total_cycles:    u64,
 }
 
 @(private)
@@ -74,7 +71,7 @@ cpu_new :: proc() -> CPU {
         program_counter = PROGRAM_ROM_MIRROR,
         cycle           = 0,
         instruction_set = instruction_set_create(),
-        page_crossed    = false,
+        total_cycles    = 0,
     }
 
     mem_reset(&cpu)
@@ -148,9 +145,13 @@ cpu_mem_write :: proc(cpu: ^CPU, address: u16, value: u8) {
     cpu.memory[address] = value
 }
 
-cpu_fetch :: proc(cpu: ^CPU) -> u8 {
+cpu_advance :: proc(cpu: ^CPU) {
     cpu.program_counter += 1
+    cpu.cycle += 1
+}
 
+cpu_fetch :: proc(cpu: ^CPU) -> u8 {
+    cpu_advance(cpu)
     return cpu_mem_read(cpu, cpu.program_counter)
 }
 
@@ -169,33 +170,25 @@ cpu_instruction_trace :: proc(cpu: ^CPU, instruction: ^Instruction) {
 
     // CPU values pre-execution
     fmt.printf(
-        "            A:%x X:%x Y:%x P:%x, SP:%x\n",
+        "            A:%x X:%x Y:%x P:%x, SP:%x Total Cycles: %d\n",
         cpu.accumulator,
         cpu.reg_x,
         cpu.reg_y,
         transmute(u8)cpu.status,
         cpu.stack_top,
+        cpu.total_cycles,
     )
 }
 
 cpu_tick :: proc(cpu: ^CPU) {
-    cpu.page_crossed = false
+    cpu.cycle = 0
     opcode := cpu_mem_read(cpu, cpu.program_counter)
     instruction := cpu.instruction_set[opcode]
 
     cpu_instruction_trace(cpu, &instruction)
-    cpu.cycle = instruction.action(cpu)
+    instruction.execute(cpu, instruction.addressing_mode)
 
-    // Page crossing forces the CPU to re-calculate the instruction's argument,
-    // Spending an additional cycle on doing so.
-    if cpu.page_crossed {
-        cpu.cycle += 1
-    }
-
-    // Force the emulator to shutdown if an unsupported opcode gets executed.
-    if cpu.cycle == 255 {
-        os.exit(-1)
-    }
+    cpu.total_cycles += u64(cpu.cycle)
 }
 
 stack_push :: proc(cpu: ^CPU, value: u8) {

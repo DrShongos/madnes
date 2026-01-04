@@ -1,8 +1,7 @@
 package console
 
 import "core:fmt"
-
-import "core:math"
+import "core:os"
 
 //////////////////////////////////////////////////////////////////
 ///              HELPER FUNCTIONS                             ///
@@ -51,24 +50,59 @@ fetch_absolute_indexed :: proc(cpu: ^CPU, register: u8) -> u16 {
     new_lo := lo + register
     if new_lo < lo {
         hi += 0x01
-        cpu.page_crossed = true
+        cpu.cycle += 1
     }
 
     return bytes_to_address(hi, new_lo)
 }
 
+fetch_address :: proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) -> u16 {
+    #partial switch addressing_mode {
+    case .Immediate:
+        {
+            cpu_advance(cpu)
+            return cpu.program_counter
+        }
+    case .Zero_Page:
+        return fetch_zero_page(cpu)
+    case .Zero_Page_X:
+        return fetch_zero_page_indexed(cpu, cpu.reg_x)
+    case .Zero_Page_Y:
+        return fetch_zero_page_indexed(cpu, cpu.reg_y)
+    case .Absolute:
+        return fetch_absolute(cpu)
+    case .Absolute_X:
+        return fetch_absolute_indexed(cpu, cpu.reg_x)
+    case .Absolute_Y:
+        return fetch_absolute_indexed(cpu, cpu.reg_y)
+    }
+
+    unreachable()
+}
+
 //////////////////////////////////////////////////////////////////
 ///                   INSTRUCTIONS                            ///
 ////////////////////////////////////////////////////////////////
-invalid_instruction: Instruction_Code : proc(cpu: ^CPU) -> u8 {
+invalid_instruction: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
     fmt.eprintf(
         "ERROR: Unknown opcode %x. Possibly unimplemented by the emulator. \n",
         cpu_mem_read(cpu, cpu.program_counter),
     )
-    return 255
+
+    os.exit(-1)
 }
 
-jmp :: proc(cpu: ^CPU, address: u16) {
+jmp: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    address := fetch_address(cpu, addressing_mode)
     hi, lo := address_to_bytes(address)
 
     // In the real 6502, there is a bug related to the JMP instruction where
@@ -81,54 +115,19 @@ jmp :: proc(cpu: ^CPU, address: u16) {
     }
 
     cpu.program_counter = address
+    cpu.cycle += 1
 }
 
-jmp_absolute: Instruction_Code : proc(cpu: ^CPU) -> u8 {
-    jmp(cpu, fetch_absolute(cpu))
-
-    return 3
-}
-
-ldx :: proc(cpu: ^CPU, value: u8) {
+ldx: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    address := fetch_address(cpu, addressing_mode)
+    value := cpu_mem_read(cpu, address)
     cpu.reg_x = value
 
     status_check_zero(cpu, value)
     status_check_negative(cpu, value)
 
-    cpu.program_counter += 1
-}
-
-ldx_immediate: Instruction_Code : proc(cpu: ^CPU) -> u8 {
-    arg := cpu_fetch(cpu)
-    ldx(cpu, arg)
-
-    return 2
-}
-
-ldx_zero_page: Instruction_Code : proc(cpu: ^CPU) -> u8 {
-    arg := cpu_mem_read(cpu, fetch_zero_page(cpu))
-    ldx(cpu, arg)
-
-    return 3
-}
-
-ldx_zero_page_y: Instruction_Code : proc(cpu: ^CPU) -> u8 {
-    arg := cpu_mem_read(cpu, fetch_zero_page_indexed(cpu, cpu.reg_y))
-    ldx(cpu, arg)
-
-    return 4
-}
-
-ldx_absolute: Instruction_Code : proc(cpu: ^CPU) -> u8 {
-    arg := cpu_mem_read(cpu, fetch_absolute(cpu))
-    ldx(cpu, arg)
-
-    return 4
-}
-
-ldx_absolute_y: Instruction_Code : proc(cpu: ^CPU) -> u8 {
-    arg := cpu_mem_read(cpu, fetch_absolute_indexed(cpu, cpu.reg_y))
-    ldx(cpu, arg)
-
-    return 4
+    cpu_advance(cpu)
 }
