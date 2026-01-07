@@ -53,5 +53,9 @@ instruction_set_create :: proc() -> [INSTRUCTION_SET_SIZE]Instruction {
     instruction_set[0xae] = {"LDX", .Absolute, ldx}
     instruction_set[0xbe] = {"LDX", .Absolute_Y, ldx}
 
+    instruction_set[0x86] = {"STX", .Zero_Page, stx}
+    instruction_set[0x96] = {"STX", .Zero_Page_Y, stx}
+    instruction_set[0x8E] = {"STX", .Absolute, stx}
+
     return instruction_set
 }

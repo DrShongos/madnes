@@ -25,6 +25,9 @@ status_check_negative :: proc(cpu: ^CPU, value: u8) {
 fetch_zero_page :: proc(cpu: ^CPU) -> u16 {
     lo := cpu_fetch(cpu)
 
+    // Consumes an additional cycle
+    cpu.cycle += 1
+
     return bytes_to_address(0x00, lo)
 }
 
@@ -37,6 +40,9 @@ fetch_absolute :: proc(cpu: ^CPU) -> u16 {
 
 fetch_zero_page_indexed :: proc(cpu: ^CPU, register: u8) -> u16 {
     lo := cpu_fetch(cpu)
+
+    // Consumes additional 2 cycles
+    cpu.cycle += 2
 
     return bytes_to_address(0x00, lo + register)
 }
@@ -128,6 +134,16 @@ ldx: Instruction_Code : proc(
 
     status_check_zero(cpu, value)
     status_check_negative(cpu, value)
+
+    cpu_advance(cpu)
+}
+
+stx: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    address := fetch_address(cpu, addressing_mode)
+    cpu_mem_write(cpu, address, cpu.reg_x)
 
     cpu_advance(cpu)
 }
