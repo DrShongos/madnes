@@ -55,7 +55,18 @@ instruction_set_create :: proc() -> [INSTRUCTION_SET_SIZE]Instruction {
 
     instruction_set[0x86] = {"STX", .Zero_Page, stx}
     instruction_set[0x96] = {"STX", .Zero_Page_Y, stx}
-    instruction_set[0x8E] = {"STX", .Absolute, stx}
+    instruction_set[0x8e] = {"STX", .Absolute, stx}
+
+    instruction_set[0x20] = {"JSR", .Absolute, jsr}
+    instruction_set[0x60] = {"RTS", .Implied, rts}
+
+    instruction_set[0xea] = {"NOP", .Implied, nop}
+
+    instruction_set[0x38] = {"SEC", .Implied, sec}
+    instruction_set[0x18] = {"CLC", .Implied, clc}
+
+    instruction_set[0xb0] = {"BCS", .Relative, bcs}
+    instruction_set[0x90] = {"BCC", .Relative, bcc}
 
     return instruction_set
 }

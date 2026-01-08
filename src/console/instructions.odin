@@ -38,6 +38,19 @@ fetch_absolute :: proc(cpu: ^CPU) -> u16 {
     return bytes_to_address(hi, lo)
 }
 
+fetch_relative :: proc(cpu: ^CPU) -> u16 {
+    offset := u16(cpu_fetch(cpu))
+    pc_offset := cpu.program_counter
+
+    // If the offset value would be negative,
+    // Reverse the offset block to make the final result wrap around.
+    if offset & 0x80 != 0 {
+        offset |= 0xff00
+    }
+
+    return pc_offset + offset
+}
+
 fetch_zero_page_indexed :: proc(cpu: ^CPU, register: u8) -> u16 {
     lo := cpu_fetch(cpu)
 
@@ -84,6 +97,8 @@ fetch_address :: proc(
         return fetch_absolute_indexed(cpu, cpu.reg_x)
     case .Absolute_Y:
         return fetch_absolute_indexed(cpu, cpu.reg_y)
+    case .Relative:
+        return fetch_relative(cpu)
     }
 
     unreachable()
@@ -124,6 +139,40 @@ jmp: Instruction_Code : proc(
     cpu.cycle += 1
 }
 
+jsr: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    address := fetch_address(cpu, addressing_mode)
+    pc_hi, pc_lo := address_to_bytes(cpu.program_counter)
+
+    // Pushes the program counter that would lead to the next instruction to the stack.
+    stack_push(cpu, pc_hi + 2)
+    cpu.cycle += 1
+
+    stack_push(cpu, pc_lo + 2)
+    cpu.cycle += 1
+
+    cpu.program_counter = address
+    cpu.cycle += 2
+}
+
+rts: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    pc_lo := stack_pop(cpu)
+    cpu.cycle += 1
+
+    pc_hi := stack_pop(cpu)
+    cpu.cycle += 1
+
+    cpu.program_counter = bytes_to_address(pc_hi, pc_lo)
+    cpu.cycle += 2
+
+    cpu_advance(cpu)
+}
+
 ldx: Instruction_Code : proc(
     cpu: ^CPU,
     addressing_mode: Instruction_Addressing_Mode,
@@ -144,6 +193,74 @@ stx: Instruction_Code : proc(
 ) {
     address := fetch_address(cpu, addressing_mode)
     cpu_mem_write(cpu, address, cpu.reg_x)
+
+    cpu_advance(cpu)
+}
+
+nop: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    cpu.cycle += 1
+    cpu_advance(cpu)
+}
+
+sec: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    cpu.status += {.Carry}
+    cpu.cycle += 1
+
+    cpu_advance(cpu)
+}
+
+clc: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    cpu.status -= {.Carry}
+    cpu.cycle += 1
+
+    cpu_advance(cpu)
+}
+
+bcs: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    if .Carry in cpu.status {
+        new_pc := fetch_relative(cpu)
+
+        // Check for page crossing
+        if new_pc & 0xff00 != cpu.program_counter {
+            cpu.cycle += 1
+        }
+        cpu.program_counter = new_pc
+    } else {
+        // Skip the argument
+        cpu_advance(cpu)
+    }
+
+    cpu_advance(cpu)
+}
+
+bcc: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    if .Carry not_in cpu.status {
+        new_pc := fetch_relative(cpu)
+
+        // Check for page crossing
+        if new_pc & 0xff00 != cpu.program_counter {
+            cpu.cycle += 1
+        }
+        cpu.program_counter = new_pc
+    } else {
+        // Skip the argument
+        cpu_advance(cpu)
+    }
 
     cpu_advance(cpu)
 }
