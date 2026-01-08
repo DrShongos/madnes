@@ -22,6 +22,14 @@ status_check_negative :: proc(cpu: ^CPU, value: u8) {
     }
 }
 
+status_check_overflow :: proc(cpu: ^CPU, value: u8) {
+    if value & 0b01000000 != 0 {
+        cpu.status += {.Overflow}
+    } else {
+        cpu.status -= {.Overflow}
+    }
+}
+
 fetch_zero_page :: proc(cpu: ^CPU) -> u16 {
     lo := cpu_fetch(cpu)
 
@@ -144,13 +152,15 @@ jsr: Instruction_Code : proc(
     addressing_mode: Instruction_Addressing_Mode,
 ) {
     address := fetch_address(cpu, addressing_mode)
-    pc_hi, pc_lo := address_to_bytes(cpu.program_counter)
 
     // Pushes the program counter that would lead to the next instruction to the stack.
-    stack_push(cpu, pc_hi + 2)
+    return_pc := cpu.program_counter
+    pc_hi, pc_lo := address_to_bytes(return_pc)
+
+    stack_push(cpu, pc_hi)
     cpu.cycle += 1
 
-    stack_push(cpu, pc_lo + 2)
+    stack_push(cpu, pc_lo)
     cpu.cycle += 1
 
     cpu.program_counter = address
@@ -187,12 +197,36 @@ ldx: Instruction_Code : proc(
     cpu_advance(cpu)
 }
 
+lda: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    address := fetch_address(cpu, addressing_mode)
+    value := cpu_mem_read(cpu, address)
+    cpu.accumulator = value
+
+    status_check_zero(cpu, value)
+    status_check_negative(cpu, value)
+
+    cpu_advance(cpu)
+}
+
 stx: Instruction_Code : proc(
     cpu: ^CPU,
     addressing_mode: Instruction_Addressing_Mode,
 ) {
     address := fetch_address(cpu, addressing_mode)
     cpu_mem_write(cpu, address, cpu.reg_x)
+
+    cpu_advance(cpu)
+}
+
+sta: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    address := fetch_address(cpu, addressing_mode)
+    cpu_mem_write(cpu, address, cpu.accumulator)
 
     cpu_advance(cpu)
 }
@@ -250,6 +284,141 @@ bcc: Instruction_Code : proc(
     addressing_mode: Instruction_Addressing_Mode,
 ) {
     if .Carry not_in cpu.status {
+        new_pc := fetch_relative(cpu)
+
+        // Check for page crossing
+        if new_pc & 0xff00 != cpu.program_counter {
+            cpu.cycle += 1
+        }
+        cpu.program_counter = new_pc
+    } else {
+        // Skip the argument
+        cpu_advance(cpu)
+    }
+
+    cpu_advance(cpu)
+}
+
+beq: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    if .Zero in cpu.status {
+        new_pc := fetch_relative(cpu)
+
+        // Check for page crossing
+        if new_pc & 0xff00 != cpu.program_counter {
+            cpu.cycle += 1
+        }
+        cpu.program_counter = new_pc
+    } else {
+        // Skip the argument
+        cpu_advance(cpu)
+    }
+
+    cpu_advance(cpu)
+}
+
+bne: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    if .Zero not_in cpu.status {
+        new_pc := fetch_relative(cpu)
+
+        // Check for page crossing
+        if new_pc & 0xff00 != cpu.program_counter {
+            cpu.cycle += 1
+        }
+        cpu.program_counter = new_pc
+    } else {
+        // Skip the argument
+        cpu_advance(cpu)
+    }
+
+    cpu_advance(cpu)
+}
+
+bit: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    bit_test := cpu_mem_read(cpu, fetch_address(cpu, addressing_mode))
+
+    test_result := cpu.accumulator | bit_test
+
+    status_check_zero(cpu, test_result)
+    status_check_negative(cpu, bit_test)
+    status_check_overflow(cpu, bit_test)
+
+    cpu_advance(cpu)
+}
+
+bvs: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    if .Overflow in cpu.status {
+        new_pc := fetch_relative(cpu)
+
+        // Check for page crossing
+        if new_pc & 0xff00 != cpu.program_counter {
+            cpu.cycle += 1
+        }
+        cpu.program_counter = new_pc
+    } else {
+        // Skip the argument
+        cpu_advance(cpu)
+    }
+
+    cpu_advance(cpu)
+}
+
+bvc: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    if .Overflow not_in cpu.status {
+        new_pc := fetch_relative(cpu)
+
+        // Check for page crossing
+        if new_pc & 0xff00 != cpu.program_counter {
+            cpu.cycle += 1
+        }
+        cpu.program_counter = new_pc
+    } else {
+        // Skip the argument
+        cpu_advance(cpu)
+    }
+
+    cpu_advance(cpu)
+}
+
+bpl: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    if .Negative not_in cpu.status {
+        new_pc := fetch_relative(cpu)
+
+        // Check for page crossing
+        if new_pc & 0xff00 != cpu.program_counter {
+            cpu.cycle += 1
+        }
+        cpu.program_counter = new_pc
+    } else {
+        // Skip the argument
+        cpu_advance(cpu)
+    }
+
+    cpu_advance(cpu)
+}
+
+bmi: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    if .Negative in cpu.status {
         new_pc := fetch_relative(cpu)
 
         // Check for page crossing

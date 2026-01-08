@@ -53,9 +53,26 @@ instruction_set_create :: proc() -> [INSTRUCTION_SET_SIZE]Instruction {
     instruction_set[0xae] = {"LDX", .Absolute, ldx}
     instruction_set[0xbe] = {"LDX", .Absolute_Y, ldx}
 
+    instruction_set[0xa9] = {"LDA", .Immediate, lda}
+    instruction_set[0xa5] = {"LDA", .Zero_Page, lda}
+    instruction_set[0xb5] = {"LDA", .Zero_Page_X, lda}
+    instruction_set[0xad] = {"LDA", .Absolute, lda}
+    instruction_set[0xbd] = {"LDA", .Absolute_X, lda}
+    instruction_set[0xb9] = {"LDA", .Absolute_Y, lda}
+    instruction_set[0xa1] = {"LDA", .Indexed_Indirect, lda}
+    instruction_set[0xb1] = {"LDA", .Indirect_Indexed, lda}
+
     instruction_set[0x86] = {"STX", .Zero_Page, stx}
     instruction_set[0x96] = {"STX", .Zero_Page_Y, stx}
     instruction_set[0x8e] = {"STX", .Absolute, stx}
+
+    instruction_set[0x85] = {"STA", .Zero_Page, sta}
+    instruction_set[0x95] = {"STA", .Zero_Page_X, sta}
+    instruction_set[0x8d] = {"STA", .Absolute, sta}
+    instruction_set[0x9d] = {"STA", .Absolute_X, sta}
+    instruction_set[0x99] = {"STA", .Absolute_Y, sta}
+    instruction_set[0x81] = {"STA", .Indexed_Indirect, sta}
+    instruction_set[0x91] = {"STA", .Indirect_Indexed, sta}
 
     instruction_set[0x20] = {"JSR", .Absolute, jsr}
     instruction_set[0x60] = {"RTS", .Implied, rts}
@@ -67,6 +84,18 @@ instruction_set_create :: proc() -> [INSTRUCTION_SET_SIZE]Instruction {
 
     instruction_set[0xb0] = {"BCS", .Relative, bcs}
     instruction_set[0x90] = {"BCC", .Relative, bcc}
+
+    instruction_set[0xf0] = {"BEQ", .Relative, beq}
+    instruction_set[0xd0] = {"BNE", .Relative, bne}
+
+    instruction_set[0x24] = {"BIT", .Zero_Page, bit}
+    instruction_set[0x2c] = {"BIT", .Absolute, bit}
+
+    instruction_set[0x70] = {"BVS", .Relative, bvs}
+    instruction_set[0x50] = {"BVC", .Relative, bvc}
+
+    instruction_set[0x10] = {"BPL", .Relative, bpl}
+    instruction_set[0x30] = {"BMI", .Relative, bmi}
 
     return instruction_set
 }
