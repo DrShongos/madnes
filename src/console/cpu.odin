@@ -30,25 +30,35 @@ CPU_Status_Flags :: enum {
     Carry             = 0,
 }
 
+Interrupt_Type :: enum {
+    IRQ,
+    NMI,
+}
+
 CPU_Status :: bit_set[CPU_Status_Flags]
 
 CPU :: struct {
-    status:          CPU_Status,
-    accumulator:     u8,
-    reg_x:           u8,
-    reg_y:           u8,
-    stack_top:       u8,
-    program_counter: u16,
-    memory:          [CPU_MEM_SIZE]u8,
+    status:                   CPU_Status,
+    accumulator:              u8,
+    reg_x:                    u8,
+    reg_y:                    u8,
+    stack_top:                u8,
+    program_counter:          u16,
+    memory:                   [CPU_MEM_SIZE]u8,
 
     // Instruction info
 
+    // Whenever the SEI instruction gets called,
+    // The update to the CPU status gets delayed to the start of the next instruction
+    // So that an ongoing Interrupt could be finished.
+    disable_interrupt_update: bool,
+
     // The amount of cycles used to perform the instruction
-    cycle:           u8,
-    instruction_set: [INSTRUCTION_SET_SIZE]Instruction,
+    cycle:                    u8,
+    instruction_set:          [INSTRUCTION_SET_SIZE]Instruction,
 
     // Debug
-    total_cycles:    u64,
+    total_cycles:             u64,
 }
 
 @(private)
@@ -63,18 +73,21 @@ mem_reset :: proc(cpu: ^CPU) {
 
 cpu_new :: proc() -> CPU {
     cpu := CPU {
-        status          = transmute(CPU_Status)DEFAULT_STATUS,
-        accumulator     = 0,
-        reg_x           = 0,
-        reg_y           = 0,
-        stack_top       = STACK_TOP,
-        program_counter = PROGRAM_ROM_MIRROR,
-        cycle           = 0,
-        instruction_set = instruction_set_create(),
-        total_cycles    = 0,
+        status                   = transmute(CPU_Status)DEFAULT_STATUS,
+        accumulator              = 0,
+        reg_x                    = 0,
+        reg_y                    = 0,
+        stack_top                = STACK_TOP,
+        program_counter          = PROGRAM_ROM_MIRROR,
+        cycle                    = 0,
+        instruction_set          = instruction_set_create(),
+        total_cycles             = 0,
+        disable_interrupt_update = false,
     }
 
     mem_reset(&cpu)
+    // The entire initialization process takes 7 cycles.
+    cpu.total_cycles += 7
 
     return cpu
 }
@@ -182,6 +195,12 @@ cpu_instruction_trace :: proc(cpu: ^CPU, instruction: ^Instruction) {
 
 cpu_tick :: proc(cpu: ^CPU) {
     cpu.cycle = 0
+
+    if cpu.disable_interrupt_update {
+        cpu.status += {.Interrupt_Disable}
+        cpu.disable_interrupt_update = false
+    }
+
     opcode := cpu_mem_read(cpu, cpu.program_counter)
     instruction := cpu.instruction_set[opcode]
 

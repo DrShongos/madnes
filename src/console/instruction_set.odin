@@ -97,5 +97,33 @@ instruction_set_create :: proc() -> [INSTRUCTION_SET_SIZE]Instruction {
     instruction_set[0x10] = {"BPL", .Relative, bpl}
     instruction_set[0x30] = {"BMI", .Relative, bmi}
 
+    instruction_set[0x78] = {"SEI", .Implied, sei}
+
+    instruction_set[0xf8] = {"SED", .Implied, sed}
+    instruction_set[0xd8] = {"CLD", .Implied, cld}
+
+    instruction_set[0x08] = {"PHP", .Implied, php}
+    instruction_set[0x28] = {"PLP", .Implied, plp}
+    instruction_set[0x48] = {"PHA", .Implied, pha}
+    instruction_set[0x68] = {"PLA", .Implied, pla}
+
+    instruction_set[0x29] = {"AND", .Immediate, and}
+    instruction_set[0x25] = {"AND", .Zero_Page, and}
+    instruction_set[0x35] = {"AND", .Zero_Page_X, and}
+    instruction_set[0x2d] = {"AND", .Absolute, and}
+    instruction_set[0x3d] = {"AND", .Absolute_X, and}
+    instruction_set[0x39] = {"AND", .Absolute_Y, and}
+    instruction_set[0x21] = {"AND", .Indexed_Indirect, and}
+    instruction_set[0x31] = {"AND", .Indirect_Indexed, and}
+
+    instruction_set[0xc9] = {"CMP", .Immediate, cmp}
+    instruction_set[0xc5] = {"CMP", .Zero_Page, cmp}
+    instruction_set[0xd5] = {"CMP", .Zero_Page_X, cmp}
+    instruction_set[0xcd] = {"CMP", .Absolute, cmp}
+    instruction_set[0xdd] = {"CMP", .Absolute_X, cmp}
+    instruction_set[0xd9] = {"CMP", .Absolute_Y, cmp}
+    instruction_set[0xc1] = {"CMP", .Indexed_Indirect, cmp}
+    instruction_set[0xd1] = {"CMP", .Indirect_Indexed, cmp}
+
     return instruction_set
 }

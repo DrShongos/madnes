@@ -178,7 +178,7 @@ rts: Instruction_Code : proc(
     cpu.cycle += 1
 
     cpu.program_counter = bytes_to_address(pc_hi, pc_lo)
-    cpu.cycle += 2
+    cpu.cycle += 3
 
     cpu_advance(cpu)
 }
@@ -429,6 +429,131 @@ bmi: Instruction_Code : proc(
     } else {
         // Skip the argument
         cpu_advance(cpu)
+    }
+
+    cpu_advance(cpu)
+}
+
+sei: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    cpu.disable_interrupt_update = true
+    cpu.cycle += 1
+
+    cpu_advance(cpu)
+}
+
+sed: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    cpu.status += {.Decimal_Mode}
+    cpu.cycle += 1
+
+    cpu_advance(cpu)
+}
+
+cld: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    cpu.status -= {.Decimal_Mode}
+    cpu.cycle += 1
+
+    cpu_advance(cpu)
+}
+
+php: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    cpu_status := cpu.status
+    cpu_status += {.Break} // Always enabled by this instruction
+    cpu.cycle += 1
+
+    stack_push(cpu, transmute(u8)cpu_status)
+    cpu.cycle += 1
+
+    cpu_advance(cpu)
+}
+
+plp: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    new_status_byte := stack_pop(cpu)
+    new_status := transmute(CPU_Status)new_status_byte
+    cpu.cycle += 1
+
+    cpu.status = new_status
+    cpu.cycle += 1
+
+    cpu.status += {.Always_1}
+    cpu.cycle += 1
+
+    cpu_advance(cpu)
+}
+
+pha: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    stack_push(cpu, cpu.accumulator)
+    cpu.cycle += 2
+
+    cpu_advance(cpu)
+}
+
+pla: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    cpu_status := stack_pop(cpu)
+    cpu.cycle += 1
+
+    cpu.accumulator = cpu_status
+    cpu.cycle += 1
+
+    status_check_zero(cpu, cpu_status)
+    status_check_negative(cpu, cpu_status)
+    cpu.cycle += 1
+
+    cpu_advance(cpu)
+}
+
+and: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    test_val := cpu_mem_read(cpu, fetch_address(cpu, addressing_mode))
+
+    cpu.accumulator = cpu.accumulator & test_val
+    status_check_zero(cpu, cpu.accumulator)
+    status_check_negative(cpu, cpu.accumulator)
+
+    cpu_advance(cpu)
+}
+
+cmp: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    address_val := cpu_mem_read(cpu, fetch_address(cpu, addressing_mode))
+    test_val := cpu.accumulator - address_val
+
+    status_check_negative(cpu, test_val)
+
+    if cpu.accumulator >= address_val {
+        cpu.status += {.Carry}
+    } else {
+        cpu.status -= {.Carry}
+    }
+
+    if cpu.accumulator == address_val {
+        cpu.status += {.Zero}
+    } else {
+        cpu.status -= {.Zero}
     }
 
     cpu_advance(cpu)
