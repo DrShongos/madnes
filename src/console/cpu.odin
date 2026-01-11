@@ -11,6 +11,7 @@ PROGRAM_ROM_START: u16 : 0x8000
 PROGRAM_ROM_MIRROR: u16 : 0xc000
 
 STACK_TOP: u8 : 0xfd
+STACK_PAGE: u16 : 0x0100
 
 CPU_Status_Flags :: enum {
     /// This bit checks whether the result of the last math operation was a negative value.
@@ -177,9 +178,76 @@ cpu_instruction_trace :: proc(cpu: ^CPU, instruction: ^Instruction) {
     )
 
     // TODO: Addressing Mode
-    //
+    #partial switch instruction.addressing_mode {
+    case .Implied:
+        fmt.printf("      ")
+    case .Immediate,
+         .Zero_Page,
+         .Zero_Page_Y,
+         .Zero_Page_X,
+         .Indexed_Indirect,
+         .Indirect_Indexed,
+         .Relative:
+        fmt.printf("%x    ", cpu.memory[cpu.program_counter + 1])
+    case .Absolute, .Absolute_X, .Absolute_Y, .Indirect:
+        fmt.printf(
+            "%x %x ",
+            cpu_mem_read(cpu, cpu.program_counter + 1),
+            cpu_mem_read(cpu, cpu.program_counter + 2),
+        )
+    }
     // Opcode name
     fmt.printf(" %s ", instruction.name)
+    #partial switch instruction.addressing_mode {
+    case .Absolute:
+        addr := bytes_to_address(
+            cpu_mem_read(cpu, cpu.program_counter + 1),
+            cpu_mem_read(cpu, cpu.program_counter + 2),
+        )
+        fmt.printf("$%x = $%x", addr, cpu_mem_read(cpu, addr))
+    case .Absolute_X:
+        fmt.printf(
+            "$%x,X ",
+            bytes_to_address(
+                cpu_mem_read(cpu, cpu.program_counter + 1),
+                cpu_mem_read(cpu, cpu.program_counter + 2),
+            ),
+        )
+    case .Absolute_Y:
+        fmt.printf(
+            "$%x,Y ",
+            bytes_to_address(
+                cpu_mem_read(cpu, cpu.program_counter + 1),
+                cpu_mem_read(cpu, cpu.program_counter + 2),
+            ),
+        )
+    case .Indirect:
+        fmt.printf(
+            "(%x) ",
+            bytes_to_address(
+                cpu_mem_read(cpu, cpu.program_counter + 1),
+                cpu_mem_read(cpu, cpu.program_counter + 2),
+            ),
+        )
+    case .Accumulator:
+        fmt.printf("A ")
+    case .Immediate:
+        fmt.printf("#%x ", cpu_mem_read(cpu, cpu.program_counter + 1))
+    case .Zero_Page:
+        fmt.printf("$%x ", cpu_mem_read(cpu, cpu.program_counter + 1))
+    case .Zero_Page_X:
+        fmt.printf("$%x,X ", cpu_mem_read(cpu, cpu.program_counter + 1))
+    case .Zero_Page_Y:
+        fmt.printf("$%x,Y ", cpu_mem_read(cpu, cpu.program_counter + 1))
+    case .Indexed_Indirect:
+        fmt.printf("($%x,X) ", cpu_mem_read(cpu, cpu.program_counter + 1))
+    case .Indirect_Indexed:
+        fmt.printf("($%x),Y ", cpu_mem_read(cpu, cpu.program_counter + 1))
+    case .Relative:
+        fmt.printf("*.%d ", i8(cpu_mem_read(cpu, cpu.program_counter + 1)))
+    case .Implied:
+        fmt.printf("     ")
+    }
 
     // CPU values pre-execution
     fmt.printf(
@@ -210,12 +278,33 @@ cpu_tick :: proc(cpu: ^CPU) {
     cpu.total_cycles += u64(cpu.cycle)
 }
 
+cpu_set_reg_x :: proc(cpu: ^CPU, value: u8) {
+    cpu.reg_x = value
+    status_check_zero(cpu, cpu.reg_x)
+    status_check_negative(cpu, cpu.reg_x)
+}
+
+cpu_set_reg_y :: proc(cpu: ^CPU, value: u8) {
+    cpu.reg_y = value
+    status_check_zero(cpu, cpu.reg_y)
+    status_check_negative(cpu, cpu.reg_y)
+}
+
+cpu_set_accumulator :: proc(cpu: ^CPU, value: u8) {
+    cpu.accumulator = value
+    status_check_zero(cpu, cpu.accumulator)
+    status_check_negative(cpu, cpu.accumulator)
+}
+
 stack_push :: proc(cpu: ^CPU, value: u8) {
-    cpu.memory[cpu.stack_top] = value
+    stack_addr := STACK_PAGE + u16(cpu.stack_top)
+    cpu.memory[stack_addr] = value
     cpu.stack_top -= 1
 }
 
 stack_pop :: proc(cpu: ^CPU) -> u8 {
     cpu.stack_top += 1
-    return cpu.memory[cpu.stack_top]
+    stack_addr := STACK_PAGE + u16(cpu.stack_top)
+    fmt.printf("STACK: %x\n", stack_addr)
+    return cpu.memory[stack_addr]
 }

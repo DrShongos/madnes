@@ -53,6 +53,12 @@ instruction_set_create :: proc() -> [INSTRUCTION_SET_SIZE]Instruction {
     instruction_set[0xae] = {"LDX", .Absolute, ldx}
     instruction_set[0xbe] = {"LDX", .Absolute_Y, ldx}
 
+    instruction_set[0xa0] = {"LDY", .Immediate, ldy}
+    instruction_set[0xa4] = {"LDY", .Zero_Page, ldy}
+    instruction_set[0xb4] = {"LDY", .Zero_Page_X, ldy}
+    instruction_set[0xac] = {"LDY", .Absolute, ldy}
+    instruction_set[0xbc] = {"LDY", .Absolute_X, ldy}
+
     instruction_set[0xa9] = {"LDA", .Immediate, lda}
     instruction_set[0xa5] = {"LDA", .Zero_Page, lda}
     instruction_set[0xb5] = {"LDA", .Zero_Page_X, lda}
@@ -143,6 +149,15 @@ instruction_set_create :: proc() -> [INSTRUCTION_SET_SIZE]Instruction {
     instruction_set[0x61] = {"ADC", .Indexed_Indirect, adc}
     instruction_set[0x71] = {"ADC", .Indirect_Indexed, adc}
 
+    instruction_set[0xe9] = {"SBC", .Immediate, sbc}
+    instruction_set[0xe5] = {"SBC", .Zero_Page, sbc}
+    instruction_set[0xf5] = {"SBC", .Zero_Page_X, sbc}
+    instruction_set[0xed] = {"SBC", .Absolute, sbc}
+    instruction_set[0xfd] = {"SBC", .Absolute_X, sbc}
+    instruction_set[0xf9] = {"SBC", .Absolute_Y, sbc}
+    instruction_set[0xe1] = {"SBC", .Indexed_Indirect, sbc}
+    instruction_set[0xf1] = {"SBC", .Indirect_Indexed, sbc}
+
     instruction_set[0xc9] = {"CMP", .Immediate, cmp}
     instruction_set[0xc5] = {"CMP", .Zero_Page, cmp}
     instruction_set[0xd5] = {"CMP", .Zero_Page_X, cmp}
@@ -152,7 +167,38 @@ instruction_set_create :: proc() -> [INSTRUCTION_SET_SIZE]Instruction {
     instruction_set[0xc1] = {"CMP", .Indexed_Indirect, cmp}
     instruction_set[0xd1] = {"CMP", .Indirect_Indexed, cmp}
 
+    instruction_set[0xc0] = {"CPY", .Immediate, cpy}
+    instruction_set[0xc4] = {"CPY", .Zero_Page, cpy}
+    instruction_set[0xcc] = {"CPY", .Absolute, cpy}
+
+    instruction_set[0xe0] = {"CPX", .Immediate, cpx}
+    instruction_set[0xe4] = {"CPX", .Zero_Page, cpx}
+    instruction_set[0xec] = {"CPX", .Absolute, cpx}
+
     instruction_set[0xb8] = {"CLV", .Implied, clv}
+
+    instruction_set[0xc8] = {"INY", .Implied, iny}
+    instruction_set[0xe8] = {"INX", .Implied, inx}
+
+    instruction_set[0xe6] = {"INC", .Zero_Page, inc}
+    instruction_set[0xf6] = {"INC", .Zero_Page_X, inc}
+    instruction_set[0xee] = {"INC", .Absolute, inc}
+    instruction_set[0xfe] = {"INC", .Absolute_X, inc}
+
+    instruction_set[0x88] = {"DEY", .Implied, dey}
+    instruction_set[0xca] = {"DEX", .Implied, dex}
+
+    instruction_set[0xc6] = {"DEC", .Zero_Page, dec}
+    instruction_set[0xd6] = {"DEC", .Zero_Page_X, dec}
+    instruction_set[0xce] = {"DEC", .Absolute, dec}
+    instruction_set[0xde] = {"DEC", .Absolute_X, dec}
+
+    instruction_set[0xaa] = {"TAX", .Implied, tax}
+    instruction_set[0xa8] = {"TAY", .Implied, tay}
+    instruction_set[0xba] = {"TSX", .Implied, tsx}
+    instruction_set[0x8a] = {"TXA", .Implied, txa}
+    instruction_set[0x9a] = {"TXS", .Implied, txs}
+    instruction_set[0x98] = {"TYA", .Implied, tya}
 
     return instruction_set
 }

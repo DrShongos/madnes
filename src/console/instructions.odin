@@ -164,10 +164,10 @@ jsr: Instruction_Code : proc(
     return_pc := cpu.program_counter
     pc_hi, pc_lo := address_to_bytes(return_pc)
 
-    stack_push(cpu, pc_hi)
+    stack_push(cpu, pc_lo)
     cpu.cycle += 1
 
-    stack_push(cpu, pc_lo)
+    stack_push(cpu, pc_hi)
     cpu.cycle += 1
 
     cpu.program_counter = address
@@ -178,10 +178,10 @@ rts: Instruction_Code : proc(
     cpu: ^CPU,
     addressing_mode: Instruction_Addressing_Mode,
 ) {
-    pc_lo := stack_pop(cpu)
+    pc_hi := stack_pop(cpu)
     cpu.cycle += 1
 
-    pc_hi := stack_pop(cpu)
+    pc_lo := stack_pop(cpu)
     cpu.cycle += 1
 
     cpu.program_counter = bytes_to_address(pc_hi, pc_lo)
@@ -195,11 +195,25 @@ ldx: Instruction_Code : proc(
     addressing_mode: Instruction_Addressing_Mode,
 ) {
     address := fetch_address(cpu, addressing_mode)
+    if addressing_mode == .Absolute {
+        cpu.cycle += 1
+    }
     value := cpu_mem_read(cpu, address)
-    cpu.reg_x = value
+    cpu_set_reg_x(cpu, value)
 
-    status_check_zero(cpu, value)
-    status_check_negative(cpu, value)
+    cpu_advance(cpu)
+}
+
+ldy: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    address := fetch_address(cpu, addressing_mode)
+    if addressing_mode == .Absolute {
+        cpu.cycle += 1
+    }
+    value := cpu_mem_read(cpu, address)
+    cpu_set_reg_y(cpu, value)
 
     cpu_advance(cpu)
 }
@@ -209,11 +223,11 @@ lda: Instruction_Code : proc(
     addressing_mode: Instruction_Addressing_Mode,
 ) {
     address := fetch_address(cpu, addressing_mode)
+    if addressing_mode == .Absolute {
+        cpu.cycle += 1
+    }
     value := cpu_mem_read(cpu, address)
-    cpu.accumulator = value
-
-    status_check_zero(cpu, value)
-    status_check_negative(cpu, value)
+    cpu_set_accumulator(cpu, value)
 
     cpu_advance(cpu)
 }
@@ -224,6 +238,9 @@ stx: Instruction_Code : proc(
 ) {
     address := fetch_address(cpu, addressing_mode)
     cpu_mem_write(cpu, address, cpu.reg_x)
+    if addressing_mode == .Absolute {
+        cpu.cycle += 1
+    }
 
     cpu_advance(cpu)
 }
@@ -536,9 +553,7 @@ and: Instruction_Code : proc(
 ) {
     test_val := cpu_mem_read(cpu, fetch_address(cpu, addressing_mode))
 
-    cpu.accumulator = cpu.accumulator & test_val
-    status_check_zero(cpu, cpu.accumulator)
-    status_check_negative(cpu, cpu.accumulator)
+    cpu_set_accumulator(cpu, cpu.accumulator & test_val)
 
     cpu_advance(cpu)
 }
@@ -549,9 +564,7 @@ ora: Instruction_Code : proc(
 ) {
     test_val := cpu_mem_read(cpu, fetch_address(cpu, addressing_mode))
 
-    cpu.accumulator = cpu.accumulator | test_val
-    status_check_zero(cpu, cpu.accumulator)
-    status_check_negative(cpu, cpu.accumulator)
+    cpu_set_accumulator(cpu, cpu.accumulator | test_val)
 
     cpu_advance(cpu)
 }
@@ -562,9 +575,7 @@ eor: Instruction_Code : proc(
 ) {
     test_val := cpu_mem_read(cpu, fetch_address(cpu, addressing_mode))
 
-    cpu.accumulator = cpu.accumulator ~ test_val
-    status_check_zero(cpu, cpu.accumulator)
-    status_check_negative(cpu, cpu.accumulator)
+    cpu_set_accumulator(cpu, cpu.accumulator ~ test_val)
 
     cpu_advance(cpu)
 }
@@ -574,9 +585,11 @@ cmp: Instruction_Code : proc(
     addressing_mode: Instruction_Addressing_Mode,
 ) {
     address_val := cpu_mem_read(cpu, fetch_address(cpu, addressing_mode))
+    fmt.printf("ADDRESS VAL = %x \n", address_val)
     test_val := cpu.accumulator - address_val
 
     status_check_negative(cpu, test_val)
+    fmt.printf("TEST VAL = %x \n", test_val)
 
     if cpu.accumulator >= address_val {
         cpu.status += {.Carry}
@@ -585,6 +598,54 @@ cmp: Instruction_Code : proc(
     }
 
     if cpu.accumulator == address_val {
+        cpu.status += {.Zero}
+    } else {
+        cpu.status -= {.Zero}
+    }
+
+    cpu_advance(cpu)
+}
+
+cpy: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    address_val := cpu_mem_read(cpu, fetch_address(cpu, addressing_mode))
+    test_val := cpu.reg_y - address_val
+
+    status_check_negative(cpu, test_val)
+
+    if cpu.reg_y >= address_val {
+        cpu.status += {.Carry}
+    } else {
+        cpu.status -= {.Carry}
+    }
+
+    if cpu.reg_y == address_val {
+        cpu.status += {.Zero}
+    } else {
+        cpu.status -= {.Zero}
+    }
+
+    cpu_advance(cpu)
+}
+
+cpx: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    address_val := cpu_mem_read(cpu, fetch_address(cpu, addressing_mode))
+    test_val := cpu.reg_x - address_val
+
+    status_check_negative(cpu, test_val)
+
+    if cpu.reg_x >= address_val {
+        cpu.status += {.Carry}
+    } else {
+        cpu.status -= {.Carry}
+    }
+
+    if cpu.reg_x == address_val {
         cpu.status += {.Zero}
     } else {
         cpu.status -= {.Zero}
@@ -631,6 +692,175 @@ adc: Instruction_Code : proc(
 
     // Set the accumulator to the result after everything has been tested
     cpu.accumulator = result
+
+    cpu_advance(cpu)
+}
+
+sbc: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    arg := cpu_mem_read(cpu, fetch_address(cpu, addressing_mode))
+    arg = ~arg
+
+    carry := transmute(u8)(cpu.status & {.Carry})
+
+    // Checks if the result of an arithmetic instruction would cause the value to wrap around.
+    carry_test := u16(cpu.accumulator) + u16(arg) + u16(carry)
+    if carry_test >> 8 != 0 {
+        cpu.status += {.Carry}
+    } else {
+        cpu.status -= {.Carry}
+    }
+
+    result := cpu.accumulator + arg + carry
+    status_check_zero(cpu, result)
+    status_check_negative(cpu, result)
+
+    if ((cpu.accumulator ~ result) & (arg ~ result) & 0x80) == 0x80 {
+        cpu.status += {.Overflow}
+    } else {
+        cpu.status -= {.Overflow}
+    }
+
+    // Set the accumulator to the result after everything has been tested
+    cpu.accumulator = result
+
+    cpu_advance(cpu)
+}
+
+iny: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    cpu_set_reg_y(cpu, cpu.reg_y + 1)
+    cpu.cycle += 1
+
+    cpu_advance(cpu)
+}
+
+inx: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    cpu_set_reg_x(cpu, cpu.reg_x + 1)
+    cpu.cycle += 1
+
+    cpu_advance(cpu)
+}
+
+inc: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    address := fetch_address(cpu, addressing_mode)
+    arg := cpu_mem_read(cpu, address)
+    arg += 1
+    cpu.cycle += 1
+
+    cpu_mem_write(cpu, address, arg)
+    cpu.cycle += 1
+
+    status_check_zero(cpu, arg)
+    status_check_negative(cpu, arg)
+
+    cpu_advance(cpu)
+}
+
+dey: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    cpu_set_reg_y(cpu, cpu.reg_y - 1)
+    cpu.cycle += 1
+
+    cpu_advance(cpu)
+}
+
+dex: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    cpu_set_reg_x(cpu, cpu.reg_x - 1)
+    cpu.cycle += 1
+
+    cpu_advance(cpu)
+}
+
+dec: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    address := fetch_address(cpu, addressing_mode)
+    arg := cpu_mem_read(cpu, address)
+    arg -= 1
+    cpu.cycle += 1
+
+    cpu_mem_write(cpu, address, arg)
+    cpu.cycle += 1
+
+    status_check_zero(cpu, arg)
+    status_check_negative(cpu, arg)
+
+    cpu_advance(cpu)
+}
+
+tax: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    cpu_set_reg_x(cpu, cpu.accumulator)
+    cpu.cycle += 1
+
+    cpu_advance(cpu)
+}
+
+tay: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    cpu_set_reg_y(cpu, cpu.accumulator)
+    cpu.cycle += 1
+
+    cpu_advance(cpu)
+}
+
+tsx: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    cpu_set_reg_x(cpu, cpu.stack_top)
+    cpu.cycle += 1
+
+    cpu_advance(cpu)
+}
+
+txa: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    cpu_set_accumulator(cpu, cpu.reg_x)
+    cpu.cycle += 1
+
+    cpu_advance(cpu)
+}
+
+tya: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    cpu_set_accumulator(cpu, cpu.reg_y)
+    cpu.cycle += 1
+
+    cpu_advance(cpu)
+}
+
+txs: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    cpu.stack_top = cpu.reg_x
+    cpu.cycle += 1
 
     cpu_advance(cpu)
 }
