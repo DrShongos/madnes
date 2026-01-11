@@ -116,6 +116,33 @@ instruction_set_create :: proc() -> [INSTRUCTION_SET_SIZE]Instruction {
     instruction_set[0x21] = {"AND", .Indexed_Indirect, and}
     instruction_set[0x31] = {"AND", .Indirect_Indexed, and}
 
+    instruction_set[0x09] = {"ORA", .Immediate, ora}
+    instruction_set[0x05] = {"ORA", .Zero_Page, ora}
+    instruction_set[0x15] = {"ORA", .Zero_Page_X, ora}
+    instruction_set[0x0d] = {"ORA", .Absolute, ora}
+    instruction_set[0x1d] = {"ORA", .Absolute_X, ora}
+    instruction_set[0x19] = {"ORA", .Absolute_Y, ora}
+    instruction_set[0x01] = {"ORA", .Indexed_Indirect, ora}
+    instruction_set[0x11] = {"ORA", .Indirect_Indexed, ora}
+
+    instruction_set[0x49] = {"EOR", .Immediate, eor}
+    instruction_set[0x45] = {"EOR", .Zero_Page, eor}
+    instruction_set[0x55] = {"EOR", .Zero_Page_X, eor}
+    instruction_set[0x4d] = {"EOR", .Absolute, eor}
+    instruction_set[0x5d] = {"EOR", .Absolute_X, eor}
+    instruction_set[0x59] = {"EOR", .Absolute_Y, eor}
+    instruction_set[0x11] = {"EOR", .Indexed_Indirect, eor}
+    instruction_set[0x51] = {"EOR", .Indirect_Indexed, eor}
+
+    instruction_set[0x69] = {"ADC", .Immediate, adc}
+    instruction_set[0x65] = {"ADC", .Zero_Page, adc}
+    instruction_set[0x75] = {"ADC", .Zero_Page_X, adc}
+    instruction_set[0x6d] = {"ADC", .Absolute, adc}
+    instruction_set[0x7d] = {"ADC", .Absolute_X, adc}
+    instruction_set[0x79] = {"ADC", .Absolute_Y, adc}
+    instruction_set[0x61] = {"ADC", .Indexed_Indirect, adc}
+    instruction_set[0x71] = {"ADC", .Indirect_Indexed, adc}
+
     instruction_set[0xc9] = {"CMP", .Immediate, cmp}
     instruction_set[0xc5] = {"CMP", .Zero_Page, cmp}
     instruction_set[0xd5] = {"CMP", .Zero_Page_X, cmp}
@@ -124,6 +151,8 @@ instruction_set_create :: proc() -> [INSTRUCTION_SET_SIZE]Instruction {
     instruction_set[0xd9] = {"CMP", .Absolute_Y, cmp}
     instruction_set[0xc1] = {"CMP", .Indexed_Indirect, cmp}
     instruction_set[0xd1] = {"CMP", .Indirect_Indexed, cmp}
+
+    instruction_set[0xb8] = {"CLV", .Implied, clv}
 
     return instruction_set
 }

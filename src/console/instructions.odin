@@ -30,6 +30,13 @@ status_check_overflow :: proc(cpu: ^CPU, value: u8) {
     }
 }
 
+status_check_arithmetic_overflow :: proc(
+    cpu: ^CPU,
+    result_val: u8,
+    arg_val: u8,
+) {
+}
+
 fetch_zero_page :: proc(cpu: ^CPU) -> u16 {
     lo := cpu_fetch(cpu)
 
@@ -345,11 +352,12 @@ bit: Instruction_Code : proc(
 ) {
     bit_test := cpu_mem_read(cpu, fetch_address(cpu, addressing_mode))
 
-    test_result := cpu.accumulator | bit_test
+    test_result := cpu.accumulator & bit_test
 
     status_check_zero(cpu, test_result)
     status_check_negative(cpu, bit_test)
     status_check_overflow(cpu, bit_test)
+    cpu.status += {.Always_1}
 
     cpu_advance(cpu)
 }
@@ -535,6 +543,32 @@ and: Instruction_Code : proc(
     cpu_advance(cpu)
 }
 
+ora: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    test_val := cpu_mem_read(cpu, fetch_address(cpu, addressing_mode))
+
+    cpu.accumulator = cpu.accumulator | test_val
+    status_check_zero(cpu, cpu.accumulator)
+    status_check_negative(cpu, cpu.accumulator)
+
+    cpu_advance(cpu)
+}
+
+eor: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    test_val := cpu_mem_read(cpu, fetch_address(cpu, addressing_mode))
+
+    cpu.accumulator = cpu.accumulator ~ test_val
+    status_check_zero(cpu, cpu.accumulator)
+    status_check_negative(cpu, cpu.accumulator)
+
+    cpu_advance(cpu)
+}
+
 cmp: Instruction_Code : proc(
     cpu: ^CPU,
     addressing_mode: Instruction_Addressing_Mode,
@@ -555,6 +589,48 @@ cmp: Instruction_Code : proc(
     } else {
         cpu.status -= {.Zero}
     }
+
+    cpu_advance(cpu)
+}
+
+clv: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    cpu.status -= {.Overflow}
+    cpu.cycle += 1
+
+    cpu_advance(cpu)
+}
+
+adc: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    arg := cpu_mem_read(cpu, fetch_address(cpu, addressing_mode))
+
+    carry := transmute(u8)(cpu.status & {.Carry})
+
+    // Checks if the result of an arithmetic instruction would cause the value to wrap around.
+    carry_test := u16(cpu.accumulator) + u16(arg) + u16(carry)
+    if carry_test > 0xff {
+        cpu.status += {.Carry}
+    } else {
+        cpu.status -= {.Carry}
+    }
+
+    result := cpu.accumulator + arg + carry
+    status_check_zero(cpu, result)
+    status_check_negative(cpu, result)
+
+    if ((cpu.accumulator ~ result) & (arg ~ result) & 0x80) == 0x80 {
+        cpu.status += {.Overflow}
+    } else {
+        cpu.status -= {.Overflow}
+    }
+
+    // Set the accumulator to the result after everything has been tested
+    cpu.accumulator = result
 
     cpu_advance(cpu)
 }
