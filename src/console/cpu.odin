@@ -305,6 +305,5 @@ stack_push :: proc(cpu: ^CPU, value: u8) {
 stack_pop :: proc(cpu: ^CPU) -> u8 {
     cpu.stack_top += 1
     stack_addr := STACK_PAGE + u16(cpu.stack_top)
-    fmt.printf("STACK: %x\n", stack_addr)
     return cpu.memory[stack_addr]
 }

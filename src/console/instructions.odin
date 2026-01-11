@@ -37,13 +37,23 @@ status_check_arithmetic_overflow :: proc(
 ) {
 }
 
+@(private)
+add_with_zero_page :: proc(cpu: ^CPU, address: u16, offset: u16) -> u16 {
+    new_addr := address + offset
+    if new_addr > 0x00ff {
+        new_addr &= 0x00ff
+    }
+
+    return new_addr
+}
+
 fetch_zero_page :: proc(cpu: ^CPU) -> u16 {
-    lo := cpu_fetch(cpu)
+    hi := cpu_fetch(cpu)
 
     // Consumes an additional cycle
     cpu.cycle += 1
 
-    return bytes_to_address(0x00, lo)
+    return bytes_to_address(hi, 0x00)
 }
 
 fetch_absolute :: proc(cpu: ^CPU) -> u16 {
@@ -67,12 +77,12 @@ fetch_relative :: proc(cpu: ^CPU) -> u16 {
 }
 
 fetch_zero_page_indexed :: proc(cpu: ^CPU, register: u8) -> u16 {
-    lo := cpu_fetch(cpu)
+    hi := cpu_fetch(cpu)
 
     // Consumes additional 2 cycles
     cpu.cycle += 2
 
-    return bytes_to_address(0x00, lo + register)
+    return bytes_to_address(hi + register, 0x00)
 }
 
 fetch_absolute_indexed :: proc(cpu: ^CPU, register: u8) -> u16 {
@@ -88,6 +98,50 @@ fetch_absolute_indexed :: proc(cpu: ^CPU, register: u8) -> u16 {
     }
 
     return bytes_to_address(hi, new_lo)
+}
+
+fetch_indexed_indirect :: proc(cpu: ^CPU) -> u16 {
+    hi := cpu_fetch(cpu)
+    addr := bytes_to_address(hi, 0x00)
+    cpu.cycle += 1
+
+    addr = add_with_zero_page(cpu, addr, u16(cpu.reg_x))
+
+    new_hi := cpu_mem_read(cpu, addr)
+    addr = add_with_zero_page(cpu, addr, 1)
+    new_lo := cpu_mem_read(cpu, addr)
+
+    cpu.cycle += 2
+
+    new_address := bytes_to_address(new_hi, new_lo)
+    cpu.cycle += 1
+
+    return new_address
+}
+
+fetch_indirect_indexed :: proc(cpu: ^CPU) -> u16 {
+    hi := cpu_fetch(cpu)
+    cpu.cycle += 1
+
+    addr := bytes_to_address(hi, 0x00)
+    new_lo := cpu_mem_read(cpu, addr)
+    addr = add_with_zero_page(cpu, addr, 1)
+    new_hi := cpu_mem_read(cpu, addr)
+
+    // Check whether the calculation will cause the high byte to change,
+    // triggering a page cross.
+    if new_lo + cpu.reg_y < new_lo {
+        new_hi += 0x01
+        cpu.cycle += 1
+    }
+    new_lo += cpu.reg_y
+
+    cpu.cycle += 2
+
+    new_address := bytes_to_address(new_lo, new_hi)
+    cpu.cycle += 1
+
+    return new_address
 }
 
 fetch_address :: proc(
@@ -114,8 +168,15 @@ fetch_address :: proc(
         return fetch_absolute_indexed(cpu, cpu.reg_y)
     case .Relative:
         return fetch_relative(cpu)
+    case .Indexed_Indirect:
+        return fetch_indexed_indirect(cpu)
+    //case .Indirect_Indexed:
+    //    return fetch_indirect_indexed(cpu)
     }
 
+    fmt.println(
+        "The current instruction used an impossible addressing mode. Terminating",
+    )
     unreachable()
 }
 
@@ -190,6 +251,26 @@ rts: Instruction_Code : proc(
     cpu_advance(cpu)
 }
 
+rti: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    cpu_status := stack_pop(cpu)
+    cpu.status = transmute(CPU_Status)cpu_status
+    cpu.status += {.Always_1}
+
+    cpu.cycle += 1
+
+    pc_hi := stack_pop(cpu)
+    cpu.cycle += 1
+
+    pc_lo := stack_pop(cpu)
+    cpu.cycle += 1
+
+    cpu.program_counter = bytes_to_address(pc_hi, pc_lo)
+    cpu.cycle += 3
+}
+
 ldx: Instruction_Code : proc(
     cpu: ^CPU,
     addressing_mode: Instruction_Addressing_Mode,
@@ -226,6 +307,10 @@ lda: Instruction_Code : proc(
     if addressing_mode == .Absolute {
         cpu.cycle += 1
     }
+
+    if addressing_mode == .Zero_Page {
+        cpu.cycle -= 1
+    }
     value := cpu_mem_read(cpu, address)
     cpu_set_accumulator(cpu, value)
 
@@ -245,11 +330,27 @@ stx: Instruction_Code : proc(
     cpu_advance(cpu)
 }
 
+sty: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    address := fetch_address(cpu, addressing_mode)
+    cpu_mem_write(cpu, address, cpu.reg_y)
+    if addressing_mode == .Absolute {
+        cpu.cycle += 1
+    }
+
+    cpu_advance(cpu)
+}
+
 sta: Instruction_Code : proc(
     cpu: ^CPU,
     addressing_mode: Instruction_Addressing_Mode,
 ) {
     address := fetch_address(cpu, addressing_mode)
+    if addressing_mode == .Absolute {
+        cpu.cycle += 1
+    }
     cpu_mem_write(cpu, address, cpu.accumulator)
 
     cpu_advance(cpu)
@@ -585,11 +686,9 @@ cmp: Instruction_Code : proc(
     addressing_mode: Instruction_Addressing_Mode,
 ) {
     address_val := cpu_mem_read(cpu, fetch_address(cpu, addressing_mode))
-    fmt.printf("ADDRESS VAL = %x \n", address_val)
     test_val := cpu.accumulator - address_val
 
     status_check_negative(cpu, test_val)
-    fmt.printf("TEST VAL = %x \n", test_val)
 
     if cpu.accumulator >= address_val {
         cpu.status += {.Carry}
@@ -861,6 +960,149 @@ txs: Instruction_Code : proc(
 ) {
     cpu.stack_top = cpu.reg_x
     cpu.cycle += 1
+
+    cpu_advance(cpu)
+}
+
+lsr: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    val: u8
+    addr: u16
+    if addressing_mode == .Accumulator {
+        val = cpu.accumulator
+    } else {
+        addr = fetch_address(cpu, addressing_mode)
+        val = cpu_mem_read(cpu, addr)
+        cpu.cycle += 1
+    }
+
+    result := val >> 1
+
+    if val & 0x01 != 0 {
+        cpu.status += {.Carry}
+    } else {
+        cpu.status -= {.Carry}
+    }
+
+    cpu.status -= {.Negative}
+    status_check_zero(cpu, result)
+    cpu.cycle += 1
+
+    if addressing_mode == .Accumulator {
+        cpu.accumulator = result
+    } else {
+        cpu_mem_write(cpu, addr, result)
+        cpu.cycle += 2
+    }
+
+    cpu_advance(cpu)
+}
+
+asl: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    val: u8
+    addr: u16
+    if addressing_mode == .Accumulator {
+        val = cpu.accumulator
+    } else {
+        addr = fetch_address(cpu, addressing_mode)
+        val = cpu_mem_read(cpu, addr)
+        cpu.cycle += 1
+    }
+
+    result := val << 1
+
+    if val & 0x80 != 0 {
+        cpu.status += {.Carry}
+    } else {
+        cpu.status -= {.Carry}
+    }
+
+    status_check_negative(cpu, result)
+    status_check_zero(cpu, result)
+    cpu.cycle += 1
+
+    if addressing_mode == .Accumulator {
+        cpu.accumulator = result
+    } else {
+        cpu_mem_write(cpu, addr, result)
+        cpu.cycle += 2
+    }
+
+    cpu_advance(cpu)
+}
+
+ror: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    val: u8
+    addr: u16
+    if addressing_mode == .Accumulator {
+        val = cpu.accumulator
+    } else {
+        addr = fetch_address(cpu, addressing_mode)
+        val = cpu_mem_read(cpu, addr)
+        cpu.cycle += 1
+    }
+
+    result := ((val >> 1) & 0x7f) | transmute(u8)(cpu.status & {.Carry}) << 7
+
+    if val & 0x01 != 0 {
+        cpu.status += {.Carry}
+    } else {
+        cpu.status -= {.Carry}
+    }
+
+    status_check_zero(cpu, result)
+    status_check_negative(cpu, result)
+    cpu.cycle += 1
+
+    if addressing_mode == .Accumulator {
+        cpu.accumulator = result
+    } else {
+        cpu_mem_write(cpu, addr, result)
+        cpu.cycle += 2
+    }
+
+    cpu_advance(cpu)
+}
+
+rol: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    val: u8
+    addr: u16
+    if addressing_mode == .Accumulator {
+        val = cpu.accumulator
+    } else {
+        addr := fetch_address(cpu, addressing_mode)
+        val = cpu_mem_read(cpu, addr)
+        cpu.cycle += 1
+    }
+
+    result := ((val << 1) & 0xfe) | transmute(u8)(cpu.status & {.Carry})
+
+    if val & 0x80 != 0 {
+        cpu.status += {.Carry}
+    } else {
+        cpu.status -= {.Carry}
+    }
+
+    status_check_zero(cpu, result)
+    status_check_negative(cpu, result)
+    cpu.cycle += 1
+
+    if addressing_mode == .Accumulator {
+        cpu.accumulator = result
+    } else {
+        cpu_mem_write(cpu, addr, result)
+    }
 
     cpu_advance(cpu)
 }

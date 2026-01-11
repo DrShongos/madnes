@@ -72,6 +72,10 @@ instruction_set_create :: proc() -> [INSTRUCTION_SET_SIZE]Instruction {
     instruction_set[0x96] = {"STX", .Zero_Page_Y, stx}
     instruction_set[0x8e] = {"STX", .Absolute, stx}
 
+    instruction_set[0x84] = {"STY", .Zero_Page, sty}
+    instruction_set[0x94] = {"STY", .Zero_Page_X, sty}
+    instruction_set[0x8c] = {"STY", .Absolute, sty}
+
     instruction_set[0x85] = {"STA", .Zero_Page, sta}
     instruction_set[0x95] = {"STA", .Zero_Page_X, sta}
     instruction_set[0x8d] = {"STA", .Absolute, sta}
@@ -82,6 +86,7 @@ instruction_set_create :: proc() -> [INSTRUCTION_SET_SIZE]Instruction {
 
     instruction_set[0x20] = {"JSR", .Absolute, jsr}
     instruction_set[0x60] = {"RTS", .Implied, rts}
+    instruction_set[0x40] = {"RTI", .Implied, rti}
 
     instruction_set[0xea] = {"NOP", .Implied, nop}
 
@@ -137,7 +142,7 @@ instruction_set_create :: proc() -> [INSTRUCTION_SET_SIZE]Instruction {
     instruction_set[0x4d] = {"EOR", .Absolute, eor}
     instruction_set[0x5d] = {"EOR", .Absolute_X, eor}
     instruction_set[0x59] = {"EOR", .Absolute_Y, eor}
-    instruction_set[0x11] = {"EOR", .Indexed_Indirect, eor}
+    instruction_set[0x41] = {"EOR", .Indexed_Indirect, eor}
     instruction_set[0x51] = {"EOR", .Indirect_Indexed, eor}
 
     instruction_set[0x69] = {"ADC", .Immediate, adc}
@@ -199,6 +204,30 @@ instruction_set_create :: proc() -> [INSTRUCTION_SET_SIZE]Instruction {
     instruction_set[0x8a] = {"TXA", .Implied, txa}
     instruction_set[0x9a] = {"TXS", .Implied, txs}
     instruction_set[0x98] = {"TYA", .Implied, tya}
+
+    instruction_set[0x4a] = {"LSR", .Accumulator, lsr}
+    instruction_set[0x46] = {"LSR", .Zero_Page, lsr}
+    instruction_set[0x56] = {"LSR", .Zero_Page_X, lsr}
+    instruction_set[0x4e] = {"LSR", .Absolute, lsr}
+    instruction_set[0x5e] = {"LSR", .Absolute_X, lsr}
+
+    instruction_set[0x0a] = {"ASL", .Accumulator, asl}
+    instruction_set[0x06] = {"ASL", .Zero_Page, asl}
+    instruction_set[0x16] = {"ASL", .Zero_Page_X, asl}
+    instruction_set[0x0e] = {"ASL", .Absolute, asl}
+    instruction_set[0x1e] = {"ASL", .Absolute_X, asl}
+
+    instruction_set[0x6a] = {"ROR", .Accumulator, ror}
+    instruction_set[0x66] = {"ROR", .Zero_Page, ror}
+    instruction_set[0x76] = {"ROR", .Zero_Page_X, ror}
+    instruction_set[0x6e] = {"ROR", .Absolute, ror}
+    instruction_set[0x7e] = {"ROR", .Absolute_X, ror}
+
+    instruction_set[0x2a] = {"ROL", .Accumulator, rol}
+    instruction_set[0x26] = {"ROL", .Zero_Page, rol}
+    instruction_set[0x36] = {"ROL", .Zero_Page_X, rol}
+    instruction_set[0x2e] = {"ROL", .Absolute, rol}
+    instruction_set[0x3e] = {"ROL", .Absolute_X, rol}
 
     return instruction_set
 }
