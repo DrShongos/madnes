@@ -386,18 +386,29 @@ sec: Instruction_Code : proc(
     cpu: ^CPU,
     addressing_mode: Instruction_Addressing_Mode,
 ) {
-    cpu.status += {.Carry}
-    cpu.cycle += 1
-
-    cpu_advance(cpu)
+    set_flag(cpu, {.Carry})
 }
 
 clc: Instruction_Code : proc(
     cpu: ^CPU,
     addressing_mode: Instruction_Addressing_Mode,
 ) {
-    cpu.status -= {.Carry}
-    cpu.cycle += 1
+    clear_flag(cpu, {.Carry})
+}
+
+branch_if :: proc(cpu: ^CPU, condition: bool) {
+    if condition {
+        new_pc := fetch_relative(cpu)
+
+        // Check for page crossing
+        if new_pc & 0xff00 != cpu.program_counter {
+            cpu.cycle += 1
+        }
+        cpu.program_counter = new_pc
+    } else {
+        // Skip the argument
+        cpu_advance(cpu)
+    }
 
     cpu_advance(cpu)
 }
@@ -406,80 +417,28 @@ bcs: Instruction_Code : proc(
     cpu: ^CPU,
     addressing_mode: Instruction_Addressing_Mode,
 ) {
-    if .Carry in cpu.status {
-        new_pc := fetch_relative(cpu)
-
-        // Check for page crossing
-        if new_pc & 0xff00 != cpu.program_counter {
-            cpu.cycle += 1
-        }
-        cpu.program_counter = new_pc
-    } else {
-        // Skip the argument
-        cpu_advance(cpu)
-    }
-
-    cpu_advance(cpu)
+    branch_if(cpu, .Carry in cpu.status)
 }
 
 bcc: Instruction_Code : proc(
     cpu: ^CPU,
     addressing_mode: Instruction_Addressing_Mode,
 ) {
-    if .Carry not_in cpu.status {
-        new_pc := fetch_relative(cpu)
-
-        // Check for page crossing
-        if new_pc & 0xff00 != cpu.program_counter {
-            cpu.cycle += 1
-        }
-        cpu.program_counter = new_pc
-    } else {
-        // Skip the argument
-        cpu_advance(cpu)
-    }
-
-    cpu_advance(cpu)
+    branch_if(cpu, .Carry not_in cpu.status)
 }
 
 beq: Instruction_Code : proc(
     cpu: ^CPU,
     addressing_mode: Instruction_Addressing_Mode,
 ) {
-    if .Zero in cpu.status {
-        new_pc := fetch_relative(cpu)
-
-        // Check for page crossing
-        if new_pc & 0xff00 != cpu.program_counter {
-            cpu.cycle += 1
-        }
-        cpu.program_counter = new_pc
-    } else {
-        // Skip the argument
-        cpu_advance(cpu)
-    }
-
-    cpu_advance(cpu)
+    branch_if(cpu, .Zero in cpu.status)
 }
 
 bne: Instruction_Code : proc(
     cpu: ^CPU,
     addressing_mode: Instruction_Addressing_Mode,
 ) {
-    if .Zero not_in cpu.status {
-        new_pc := fetch_relative(cpu)
-
-        // Check for page crossing
-        if new_pc & 0xff00 != cpu.program_counter {
-            cpu.cycle += 1
-        }
-        cpu.program_counter = new_pc
-    } else {
-        // Skip the argument
-        cpu_advance(cpu)
-    }
-
-    cpu_advance(cpu)
+    branch_if(cpu, .Zero not_in cpu.status)
 }
 
 bit: Instruction_Code : proc(
@@ -502,80 +461,28 @@ bvs: Instruction_Code : proc(
     cpu: ^CPU,
     addressing_mode: Instruction_Addressing_Mode,
 ) {
-    if .Overflow in cpu.status {
-        new_pc := fetch_relative(cpu)
-
-        // Check for page crossing
-        if new_pc & 0xff00 != cpu.program_counter {
-            cpu.cycle += 1
-        }
-        cpu.program_counter = new_pc
-    } else {
-        // Skip the argument
-        cpu_advance(cpu)
-    }
-
-    cpu_advance(cpu)
+    branch_if(cpu, .Overflow in cpu.status)
 }
 
 bvc: Instruction_Code : proc(
     cpu: ^CPU,
     addressing_mode: Instruction_Addressing_Mode,
 ) {
-    if .Overflow not_in cpu.status {
-        new_pc := fetch_relative(cpu)
-
-        // Check for page crossing
-        if new_pc & 0xff00 != cpu.program_counter {
-            cpu.cycle += 1
-        }
-        cpu.program_counter = new_pc
-    } else {
-        // Skip the argument
-        cpu_advance(cpu)
-    }
-
-    cpu_advance(cpu)
+    branch_if(cpu, .Overflow not_in cpu.status)
 }
 
 bpl: Instruction_Code : proc(
     cpu: ^CPU,
     addressing_mode: Instruction_Addressing_Mode,
 ) {
-    if .Negative not_in cpu.status {
-        new_pc := fetch_relative(cpu)
-
-        // Check for page crossing
-        if new_pc & 0xff00 != cpu.program_counter {
-            cpu.cycle += 1
-        }
-        cpu.program_counter = new_pc
-    } else {
-        // Skip the argument
-        cpu_advance(cpu)
-    }
-
-    cpu_advance(cpu)
+    branch_if(cpu, .Negative not_in cpu.status)
 }
 
 bmi: Instruction_Code : proc(
     cpu: ^CPU,
     addressing_mode: Instruction_Addressing_Mode,
 ) {
-    if .Negative in cpu.status {
-        new_pc := fetch_relative(cpu)
-
-        // Check for page crossing
-        if new_pc & 0xff00 != cpu.program_counter {
-            cpu.cycle += 1
-        }
-        cpu.program_counter = new_pc
-    } else {
-        // Skip the argument
-        cpu_advance(cpu)
-    }
-
-    cpu_advance(cpu)
+    branch_if(cpu, .Negative in cpu.status)
 }
 
 sei: Instruction_Code : proc(
@@ -588,24 +495,32 @@ sei: Instruction_Code : proc(
     cpu_advance(cpu)
 }
 
+set_flag :: proc(cpu: ^CPU, flag: CPU_Status) {
+    cpu.status += flag
+    cpu.cycle += 1
+
+    cpu_advance(cpu)
+}
+
+clear_flag :: proc(cpu: ^CPU, flag: CPU_Status) {
+    cpu.status -= flag
+    cpu.cycle += 1
+
+    cpu_advance(cpu)
+}
+
 sed: Instruction_Code : proc(
     cpu: ^CPU,
     addressing_mode: Instruction_Addressing_Mode,
 ) {
-    cpu.status += {.Decimal_Mode}
-    cpu.cycle += 1
-
-    cpu_advance(cpu)
+    set_flag(cpu, {.Decimal_Mode})
 }
 
 cld: Instruction_Code : proc(
     cpu: ^CPU,
     addressing_mode: Instruction_Addressing_Mode,
 ) {
-    cpu.status -= {.Decimal_Mode}
-    cpu.cycle += 1
-
-    cpu_advance(cpu)
+    clear_flag(cpu, {.Decimal_Mode})
 }
 
 php: Instruction_Code : proc(
@@ -775,10 +690,7 @@ clv: Instruction_Code : proc(
     cpu: ^CPU,
     addressing_mode: Instruction_Addressing_Mode,
 ) {
-    cpu.status -= {.Overflow}
-    cpu.cycle += 1
-
-    cpu_advance(cpu)
+    clear_flag(cpu, {.Overflow})
 }
 
 adc: Instruction_Code : proc(
