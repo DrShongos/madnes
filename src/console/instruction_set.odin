@@ -46,6 +46,7 @@ instruction_set_create :: proc() -> [INSTRUCTION_SET_SIZE]Instruction {
     }
 
     instruction_set[0x4c] = {"JMP", .Absolute, jmp}
+    instruction_set[0x6c] = {"JMP", .Indirect, jmp}
 
     instruction_set[0xa2] = {"LDX", .Immediate, ldx}
     instruction_set[0xa6] = {"LDX", .Zero_Page, ldx}

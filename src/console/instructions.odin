@@ -124,9 +124,9 @@ fetch_indirect_indexed :: proc(cpu: ^CPU) -> u16 {
     cpu.cycle += 1
 
     addr := bytes_to_address(hi, 0x00)
-    new_lo := cpu_mem_read(cpu, addr)
-    addr = add_with_zero_page(cpu, addr, 1)
     new_hi := cpu_mem_read(cpu, addr)
+    addr = add_with_zero_page(cpu, addr, 1)
+    new_lo := cpu_mem_read(cpu, addr)
 
     // Check whether the calculation will cause the high byte to change,
     // triggering a page cross.
@@ -138,8 +138,33 @@ fetch_indirect_indexed :: proc(cpu: ^CPU) -> u16 {
 
     cpu.cycle += 2
 
-    new_address := bytes_to_address(new_lo, new_hi)
+    new_address := bytes_to_address(new_hi, new_lo)
     cpu.cycle += 1
+
+    return new_address
+}
+
+fetch_indirect :: proc(cpu: ^CPU) -> u16 {
+    hi := cpu_fetch(cpu)
+    lo := cpu_fetch(cpu)
+
+    addr := bytes_to_address(hi, lo)
+    new_hi := cpu_mem_read(cpu, addr)
+    // In the real 6502, there is a bug related to the JMP instruction where
+    // Trying to set the program counter to the end of a page (0xXXff)
+    // Ends up with the CPU failing to increment the value, causing the PC
+    // To jump to the start of the address page (0xXX00)
+    if addr & 0x00ff != 0x00ff {
+        addr += 1
+    } else {
+        addr = bytes_to_address(0x00, lo)
+    }
+    new_lo := cpu_mem_read(cpu, addr)
+
+    cpu.cycle += 2
+
+
+    new_address := bytes_to_address(new_hi, new_lo)
 
     return new_address
 }
@@ -170,8 +195,10 @@ fetch_address :: proc(
         return fetch_relative(cpu)
     case .Indexed_Indirect:
         return fetch_indexed_indirect(cpu)
-    //case .Indirect_Indexed:
-    //    return fetch_indirect_indexed(cpu)
+    case .Indirect_Indexed:
+        return fetch_indirect_indexed(cpu)
+    case .Indirect:
+        return fetch_indirect(cpu)
     }
 
     fmt.println(
@@ -201,15 +228,6 @@ jmp: Instruction_Code : proc(
 ) {
     address := fetch_address(cpu, addressing_mode)
     hi, lo := address_to_bytes(address)
-
-    // In the real 6502, there is a bug related to the JMP instruction where
-    // Trying to set the program counter to the end of a page (0xXXff)
-    // Ends up with the CPU failing to increment the value, causing the PC
-    // To jump to the start of the address page (0xXX00)
-    if lo == 0xff {
-        cpu.program_counter = bytes_to_address(hi, 0x00)
-        return
-    }
 
     cpu.program_counter = address
     cpu.cycle += 1
