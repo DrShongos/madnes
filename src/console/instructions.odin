@@ -337,43 +337,39 @@ lda: Instruction_Code : proc(
     cpu_advance(cpu)
 }
 
-stx: Instruction_Code : proc(
+store_register :: proc(
     cpu: ^CPU,
     addressing_mode: Instruction_Addressing_Mode,
+    register: u8,
 ) {
     address := fetch_address(cpu, addressing_mode)
-    cpu_mem_write(cpu, address, cpu.reg_x)
+    cpu_mem_write(cpu, address, register)
     if addressing_mode == .Absolute {
         cpu.cycle += 1
     }
 
     cpu_advance(cpu)
+}
+
+stx: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    store_register(cpu, addressing_mode, cpu.reg_x)
 }
 
 sty: Instruction_Code : proc(
     cpu: ^CPU,
     addressing_mode: Instruction_Addressing_Mode,
 ) {
-    address := fetch_address(cpu, addressing_mode)
-    cpu_mem_write(cpu, address, cpu.reg_y)
-    if addressing_mode == .Absolute {
-        cpu.cycle += 1
-    }
-
-    cpu_advance(cpu)
+    store_register(cpu, addressing_mode, cpu.reg_y)
 }
 
 sta: Instruction_Code : proc(
     cpu: ^CPU,
     addressing_mode: Instruction_Addressing_Mode,
 ) {
-    address := fetch_address(cpu, addressing_mode)
-    if addressing_mode == .Absolute {
-        cpu.cycle += 1
-    }
-    cpu_mem_write(cpu, address, cpu.accumulator)
-
-    cpu_advance(cpu)
+    store_register(cpu, addressing_mode, cpu.accumulator)
 }
 
 nop: Instruction_Code : proc(
@@ -575,12 +571,8 @@ pla: Instruction_Code : proc(
     cpu_status := stack_pop(cpu)
     cpu.cycle += 1
 
-    cpu.accumulator = cpu_status
-    cpu.cycle += 1
-
-    status_check_zero(cpu, cpu_status)
-    status_check_negative(cpu, cpu_status)
-    cpu.cycle += 1
+    cpu_set_accumulator(cpu, cpu_status)
+    cpu.cycle += 2
 
     cpu_advance(cpu)
 }
@@ -618,76 +610,51 @@ eor: Instruction_Code : proc(
     cpu_advance(cpu)
 }
 
-cmp: Instruction_Code : proc(
+compare_register :: proc(
     cpu: ^CPU,
     addressing_mode: Instruction_Addressing_Mode,
+    register: u8,
 ) {
     address_val := cpu_mem_read(cpu, fetch_address(cpu, addressing_mode))
-    test_val := cpu.accumulator - address_val
+    test_val := register - address_val
 
     status_check_negative(cpu, test_val)
 
-    if cpu.accumulator >= address_val {
+    if register >= address_val {
         cpu.status += {.Carry}
     } else {
         cpu.status -= {.Carry}
     }
 
-    if cpu.accumulator == address_val {
+    if register == address_val {
         cpu.status += {.Zero}
     } else {
         cpu.status -= {.Zero}
     }
 
     cpu_advance(cpu)
+
+}
+
+cmp: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    compare_register(cpu, addressing_mode, cpu.accumulator)
 }
 
 cpy: Instruction_Code : proc(
     cpu: ^CPU,
     addressing_mode: Instruction_Addressing_Mode,
 ) {
-    address_val := cpu_mem_read(cpu, fetch_address(cpu, addressing_mode))
-    test_val := cpu.reg_y - address_val
-
-    status_check_negative(cpu, test_val)
-
-    if cpu.reg_y >= address_val {
-        cpu.status += {.Carry}
-    } else {
-        cpu.status -= {.Carry}
-    }
-
-    if cpu.reg_y == address_val {
-        cpu.status += {.Zero}
-    } else {
-        cpu.status -= {.Zero}
-    }
-
-    cpu_advance(cpu)
+    compare_register(cpu, addressing_mode, cpu.reg_y)
 }
 
 cpx: Instruction_Code : proc(
     cpu: ^CPU,
     addressing_mode: Instruction_Addressing_Mode,
 ) {
-    address_val := cpu_mem_read(cpu, fetch_address(cpu, addressing_mode))
-    test_val := cpu.reg_x - address_val
-
-    status_check_negative(cpu, test_val)
-
-    if cpu.reg_x >= address_val {
-        cpu.status += {.Carry}
-    } else {
-        cpu.status -= {.Carry}
-    }
-
-    if cpu.reg_x == address_val {
-        cpu.status += {.Zero}
-    } else {
-        cpu.status -= {.Zero}
-    }
-
-    cpu_advance(cpu)
+    compare_register(cpu, addressing_mode, cpu.reg_x)
 }
 
 clv: Instruction_Code : proc(
