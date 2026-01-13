@@ -89,15 +89,17 @@ fetch_absolute_indexed :: proc(cpu: ^CPU, register: u8) -> u16 {
     hi := cpu_fetch(cpu)
     lo := cpu_fetch(cpu)
 
+    address := bytes_to_address(hi, lo)
+    new_address := address + u16(register)
+
     // Check whether the calculation will cause the high byte to change,
     // triggering a page cross.
-    new_lo := lo + register
-    if new_lo < lo {
-        hi += 0x01
+    if address & 0x00ff < new_address & 0x00ff ||
+       address & 0xff00 > new_address & 0xff00 {
         cpu.cycle += 1
     }
 
-    return bytes_to_address(hi, new_lo)
+    return new_address
 }
 
 fetch_indexed_indirect :: proc(cpu: ^CPU) -> u16 {
@@ -130,15 +132,15 @@ fetch_indirect_indexed :: proc(cpu: ^CPU) -> u16 {
 
     // Check whether the calculation will cause the high byte to change,
     // triggering a page cross.
-    if new_lo + cpu.reg_y < new_lo {
-        new_hi += 0x01
+    actual_address := bytes_to_address(new_hi, new_lo)
+    new_address := actual_address + u16(cpu.reg_y)
+    if actual_address & 0x00ff < new_address & 0x00ff ||
+       actual_address & 0xff00 > new_address & 0xff00 {
         cpu.cycle += 1
     }
-    new_lo += cpu.reg_y
 
     cpu.cycle += 2
 
-    new_address := bytes_to_address(new_hi, new_lo)
     cpu.cycle += 1
 
     return new_address
@@ -546,6 +548,8 @@ plp: Instruction_Code : proc(
     cpu.cycle += 1
 
     cpu.status = new_status
+    // The break flag is always ignored
+    cpu.status -= {.Break}
     cpu.cycle += 1
 
     cpu.status += {.Always_1}
