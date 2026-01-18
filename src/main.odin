@@ -1,5 +1,8 @@
 package main
 
+MSB_8: u8 : 0xf0
+LSB_8: u8 : 0x0f
+
 import "console"
 import "core:fmt"
 import "core:os"

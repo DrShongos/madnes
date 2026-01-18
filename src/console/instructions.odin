@@ -701,6 +701,7 @@ sbc: Instruction_Code : proc(
     addressing_mode: Instruction_Addressing_Mode,
 ) {
     arg := cpu_mem_read(cpu, fetch_address(cpu, addressing_mode))
+    // Invert all the bits in the argument to turn adding into subtracting.
     arg = ~arg
 
     carry := transmute(u8)(cpu.status & {.Carry})
