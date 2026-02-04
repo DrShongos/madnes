@@ -45,7 +45,7 @@ CPU :: struct {
     reg_y:                    u8,
     stack_top:                u8,
     program_counter:          u16,
-    memory:                   [CPU_MEM_SIZE]u8,
+    memory:                   [int(CPU_MEM_SIZE) + 1]u8,
 
     // Instruction info
 

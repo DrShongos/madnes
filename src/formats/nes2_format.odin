@@ -1,4 +1,4 @@
-package main
+package formats
 
 import "core:fmt"
 import "core:os"
