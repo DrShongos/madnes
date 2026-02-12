@@ -3,6 +3,8 @@ package console
 import "core:fmt"
 import "core:os"
 
+import "mappers"
+
 DEFAULT_STATUS: u8 : 0x24
 
 CPU_MEM_SIZE: u16 : 0xffff
@@ -39,6 +41,8 @@ Interrupt_Type :: enum {
 CPU_Status :: bit_set[CPU_Status_Flags]
 
 CPU :: struct {
+    // The pointer to the Console
+    console:                  ^Console,
     status:                   CPU_Status,
     accumulator:              u8,
     reg_x:                    u8,
@@ -88,7 +92,7 @@ cpu_new :: proc() -> CPU {
 
     mem_reset(&cpu)
     // The entire initialization process takes 7 cycles.
-    cpu.total_cycles += 7
+    cpu.total_cycles += 3
 
     return cpu
 }
@@ -112,6 +116,16 @@ address_to_bytes :: proc(address: u16) -> (u8, u8) {
 }
 
 cpu_mem_read :: proc(cpu: ^CPU, address: u16) -> u8 {
+    // Check the cartridge first
+    cartridge_accessed, cartridge_byte := mappers.nrom_mem_read(
+        &cpu.console.mapper,
+        address,
+    )
+
+    if cartridge_accessed {
+        return cartridge_byte
+    }
+
     if address <= 0x07ff {
         return cpu.memory[address]
     }
@@ -136,6 +150,15 @@ cpu_mem_read :: proc(cpu: ^CPU, address: u16) -> u8 {
 }
 
 cpu_mem_write :: proc(cpu: ^CPU, address: u16, value: u8) {
+    cartridge_accessed := mappers.nrom_mem_write(
+        &cpu.console.mapper,
+        address,
+        value,
+    )
+    if cartridge_accessed {
+        return
+    }
+
     if address <= 0x07ff {
         cpu.memory[address] = value
     }
@@ -307,3 +330,4 @@ stack_pop :: proc(cpu: ^CPU) -> u8 {
     stack_addr := STACK_PAGE + u16(cpu.stack_top)
     return cpu.memory[stack_addr]
 }
+

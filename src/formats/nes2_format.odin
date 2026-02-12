@@ -163,8 +163,13 @@ load_rom_data :: proc(format: ^NES2_0_Format, data: []u8) {
     // If present, the code is always 512 bytes in size.
     if (format.use_trainer) {
         copy(format.trainer_data[:], data[offset:(offset + 512)])
+        offset += 512
     }
-    offset += 512
+
+    // ROM Sizes are represented in units of blocks of memory,
+    // 16kb and 8kb for PRG and CHR rom, respectively
+    format.prg_rom_size = format.prg_rom_size * 0x4000
+    format.chr_rom_size = format.chr_rom_size * 0x2000
 
     // PRG ROM
     prg_rom, prg_alloc_err := make_slice([]u8, format.prg_rom_size)
@@ -207,3 +212,4 @@ nes2_0_parse :: proc(data: []u8) -> NES2_0_Format {
 
     return rom_file
 }
+

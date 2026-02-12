@@ -11,7 +11,12 @@ def compile(args):
         os.makedirs("target")
     
     # Compile first, because the compiler does not allow directly passing arguments to the program.
-    compile_process = subprocess.run(["odin", "build", "src/", "-out:target/madnes"])
+    compile_flags = ["odin", "build", "src/", "-out:target/madnes"]
+    if args.sanitize:
+        compile_flags.append("-sanitize:memory")
+
+    compile_process = subprocess.run(compile_flags)
+        
 
     # Runs only if the compilation process didn't fail
     if compile_process.returncode == 0:
@@ -21,6 +26,7 @@ def compile(args):
 def run(args):
     parser = argparse.ArgumentParser()
     parser.add_argument("--rom", required=True, help="--rom file.nes")
+    parser.add_argument("-s", "--sanitize", action="store_true")
 
     if len(args) == 0:
         return
