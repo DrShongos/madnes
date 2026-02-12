@@ -2,9 +2,13 @@ package formats
 
 import "core:fmt"
 import "core:os"
+
 MAPPER_NUMBERS_BITS: u8 : 0xf0
 CONSOLE_TYPE_BITS: u8 : 0x03
 CPU_TIMING_BITS: u8 : 0x02
+
+PRG_ROM_SIZE_UNIT :: 0x4000
+CHR_ROM_SIZE_UNIT :: 0x2000
 
 Nametable_Layout :: enum {
     Vertical   = 0,
@@ -168,8 +172,8 @@ load_rom_data :: proc(format: ^NES2_0_Format, data: []u8) {
 
     // ROM Sizes are represented in units of blocks of memory,
     // 16kb and 8kb for PRG and CHR rom, respectively
-    format.prg_rom_size = format.prg_rom_size * 0x4000
-    format.chr_rom_size = format.chr_rom_size * 0x2000
+    format.prg_rom_size = format.prg_rom_size * PRG_ROM_SIZE_UNIT
+    format.chr_rom_size = format.chr_rom_size * CHR_ROM_SIZE_UNIT
 
     // PRG ROM
     prg_rom, prg_alloc_err := make_slice([]u8, format.prg_rom_size)

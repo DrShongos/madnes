@@ -21,7 +21,6 @@ nrom_from_nes2 :: proc(nes2_file: ^formats.NES2_0_Format) -> NROM {
 
     nrom.prg_rom = make([]u8, nes2_file.prg_rom_size)
     copy(nrom.prg_rom[:], nes2_file.prg_rom)
-    fmt.println(nes2_file.prg_rom)
 
     nrom.chr_rom = make([]u8, nes2_file.chr_rom_size)
     copy(nrom.chr_rom[:], nes2_file.chr_rom)
