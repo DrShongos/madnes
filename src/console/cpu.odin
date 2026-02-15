@@ -1,7 +1,6 @@
 package console
 
 import "core:fmt"
-import "core:os"
 
 import "mappers"
 
@@ -116,7 +115,15 @@ address_to_bytes :: proc(address: u16) -> (u8, u8) {
 }
 
 cpu_mem_read :: proc(cpu: ^CPU, address: u16) -> u8 {
-    // Check the cartridge first
+    // Check the PPU
+    ppu_accessed, ppu_byte := ppu_mem_read(&cpu.console.ppu, address)
+
+    if ppu_accessed {
+        fmt.println(cpu.console.ppu.initialized)
+        return ppu_byte
+    }
+
+    // Check the cartridge
     cartridge_accessed, cartridge_byte := mappers.nrom_mem_read(
         &cpu.console.mapper,
         address,
@@ -145,11 +152,17 @@ cpu_mem_read :: proc(cpu: ^CPU, address: u16) -> u8 {
         return cpu.memory[address - 0x1800]
     }
 
-    // TODO: Read memory from the other parts of the console (BUS)
     return cpu.memory[address]
 }
 
 cpu_mem_write :: proc(cpu: ^CPU, address: u16, value: u8) {
+    // Check the PPU
+    ppu_accessed := ppu_mem_write(&cpu.console.ppu, address, value)
+
+    if ppu_accessed {
+        return
+    }
+
     cartridge_accessed := mappers.nrom_mem_write(
         &cpu.console.mapper,
         address,
@@ -178,7 +191,6 @@ cpu_mem_write :: proc(cpu: ^CPU, address: u16, value: u8) {
         cpu.memory[address - 0x1800] = value
     }
 
-    // TODO: Write to the other parts of the console
     cpu.memory[address] = value
 }
 

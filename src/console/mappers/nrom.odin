@@ -1,8 +1,6 @@
 package mappers
 
 import "../../formats"
-import "core:fmt"
-import "core:os"
 
 NROM_Nametable :: enum {
     Vertical   = 0,

@@ -2,16 +2,19 @@ package console
 
 import "../formats"
 import "./mappers"
-import "core:fmt"
+
+PPU_WARMUP_CYCLE :: 29658
 
 Console :: struct {
     cpu:    CPU,
+    ppu:    PPU,
     mapper: mappers.NROM, // TODO: Implement Mapper interface to support multiple cartridge types
 }
 
 console_new :: proc() -> Console {
     console := Console {
         cpu = cpu_new(),
+        ppu = ppu_new(),
     }
     console.cpu.console = &console
 
@@ -43,5 +46,18 @@ console_load_cartridge :: proc(
 
 console_tick :: proc(console: ^Console) {
     cpu_tick(&console.cpu)
+
+    if console.ppu.initialized {
+        for _ in 0 ..< console.cpu.cycle {
+            // The PPU ticks 3 times for each CPU cycle
+            ppu_tick(&console.ppu)
+            ppu_tick(&console.ppu)
+            ppu_tick(&console.ppu)
+        }
+    }
+
+    if console.cpu.total_cycles >= PPU_WARMUP_CYCLE {
+        ppu_init(&console.ppu)
+    }
 }
 
