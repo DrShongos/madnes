@@ -60,4 +60,3 @@ console_tick :: proc(console: ^Console) {
         ppu_init(&console.ppu)
     }
 }
-

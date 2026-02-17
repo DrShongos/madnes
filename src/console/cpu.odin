@@ -119,7 +119,6 @@ cpu_mem_read :: proc(cpu: ^CPU, address: u16) -> u8 {
     ppu_accessed, ppu_byte := ppu_mem_read(&cpu.console.ppu, address)
 
     if ppu_accessed {
-        fmt.println(cpu.console.ppu.initialized)
         return ppu_byte
     }
 
@@ -342,4 +341,3 @@ stack_pop :: proc(cpu: ^CPU) -> u8 {
     stack_addr := STACK_PAGE + u16(cpu.stack_top)
     return cpu.memory[stack_addr]
 }
-
