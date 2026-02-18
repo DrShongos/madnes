@@ -3,6 +3,7 @@ package main
 MSB_8: u8 : 0xf0
 LSB_8: u8 : 0x0f
 
+import "emulator"
 import "formats"
 
 import "console"
@@ -17,22 +18,8 @@ main :: proc() {
         os.exit(-1)
     }
 
-    rom_file, success := os.read_entire_file_from_filename(args[1])
-    defer delete(rom_file)
+    emu := emulator.emulator_new(args[1])
+    defer emulator.emulator_delete(&emu)
 
-    if !success {
-        fmt.eprintf("Failed to open the specified ROM file.\n")
-        os.exit(-1)
-    }
-
-    nes := console.console_new()
-    defer console.console_delete(&nes)
-
-    ines_format := formats.nes2_0_parse(rom_file)
-    console.console_load_cartridge(&nes, &ines_format)
-
-    for {
-        console.console_tick(&nes)
-    }
+    emulator.emulator_run(&emu)
 }
-

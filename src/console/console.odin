@@ -2,6 +2,7 @@ package console
 
 import "../formats"
 import "./mappers"
+import "core:fmt"
 
 PPU_WARMUP_CYCLE :: 29658
 
@@ -45,7 +46,12 @@ console_load_cartridge :: proc(
 }
 
 console_tick :: proc(console: ^Console) {
+    // TODO: Please find a better way to handle memory reading across the entire console
+    console.cpu.console = console
+
     cpu_tick(&console.cpu)
+
+    //fmt.println("up")
 
     if console.ppu.initialized {
         for _ in 0 ..< console.cpu.cycle {
@@ -55,6 +61,8 @@ console_tick :: proc(console: ^Console) {
             ppu_tick(&console.ppu)
         }
     }
+
+    //fmt.println("bibi")
 
     if console.cpu.total_cycles >= PPU_WARMUP_CYCLE {
         ppu_init(&console.ppu)
