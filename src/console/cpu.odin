@@ -116,7 +116,11 @@ address_to_bytes :: proc(address: u16) -> (u8, u8) {
 
 cpu_mem_read :: proc(cpu: ^CPU, address: u16) -> u8 {
     // Check the PPU
-    ppu_accessed, ppu_byte := ppu_mem_read(&cpu.console.ppu, address)
+    ppu_accessed, ppu_byte := ppu_mem_read(
+        &cpu.console.ppu,
+        &cpu.console.mapper,
+        address,
+    )
 
     if ppu_accessed {
         return ppu_byte
@@ -156,7 +160,12 @@ cpu_mem_read :: proc(cpu: ^CPU, address: u16) -> u8 {
 
 cpu_mem_write :: proc(cpu: ^CPU, address: u16, value: u8) {
     // Check the PPU
-    ppu_accessed := ppu_mem_write(&cpu.console.ppu, address, value)
+    ppu_accessed := ppu_mem_write(
+        &cpu.console.ppu,
+        &cpu.console.mapper,
+        address,
+        value,
+    )
 
     if ppu_accessed {
         return

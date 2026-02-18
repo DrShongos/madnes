@@ -48,10 +48,15 @@ nrom_mem_read :: proc(nrom: ^NROM, address: u16) -> (bool, u8) {
         return true, nrom.prg_rom[(int(address) % len(nrom.prg_rom))]
     }
 
-    // (0x0000 - 0x1fff) - CHR Rom
-    //if address >= 0x0000 && address <= 0x1fff {
-    //    return true, nrom.chr_rom[(int(address) % len(nrom.chr_rom))]
-    //}
+    return false, 0
+}
+
+// Reads CHR memory from the NROM cartridge.
+// Alongside the byte, returns a bool that specifies whether the read operation had succeeded.
+nrom_ppu_read :: proc(nrom: ^NROM, address: u16) -> (bool, u8) {
+    if address >= 0x0000 && address <= 0x1fff {
+        return true, nrom.chr_rom[(int(address) % len(nrom.chr_rom))]
+    }
 
     return false, 0
 }
@@ -72,4 +77,3 @@ nrom_mem_write :: proc(nrom: ^NROM, address: u16, value: u8) -> bool {
 
     return false
 }
-

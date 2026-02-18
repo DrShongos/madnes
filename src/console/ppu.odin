@@ -1,6 +1,8 @@
 package console
 
-PPU_VRAM_SIZE :: 0x4000
+import "mappers"
+
+PPU_VRAM_SIZE :: 0x2000
 
 // PPU STATUS BITS
 PPU_SPRITE_OVERFLOW :: 0x20
@@ -168,7 +170,39 @@ ppuaddr_increment :: proc(ppu: ^PPU) {
     }
 }
 
-ppu_mem_read :: proc(ppu: ^PPU, address: u16) -> (bool, u8) {
+// A wrapper function to fetch CHR memory from all the console's components
+@(private)
+ppu_vram_read :: proc(ppu: ^PPU, mapper: ^mappers.NROM, address: u16) -> u8 {
+    mapper_accessed, mapper_byte := mappers.nrom_ppu_read(mapper, address)
+    if mapper_accessed {
+        return mapper_byte
+    }
+
+    // TODO: (0x3f00-0x3fff) SHOULD BE CONFIGURED TO RETURN DATA FROM THE PALETTE TABLE
+    return ppu.vram[address % PPU_VRAM_SIZE]
+}
+
+// A wrapper function to write CHR memory into all the console's components
+@(private)
+ppu_vram_write :: proc(
+    ppu: ^PPU,
+    mapper: ^mappers.NROM,
+    address: u16,
+    val: u8,
+) {
+    // TODO: Configure to handle mappers (once a mapper with CHR-RAM gets implemented)
+    // And exclude the palette table
+    ppu.vram[address % PPU_VRAM_SIZE] = val
+}
+
+ppu_mem_read :: proc(
+    ppu: ^PPU,
+    mapper: ^mappers.NROM,
+    address: u16,
+) -> (
+    bool,
+    u8,
+) {
     if address == 0x2002 {
         ppu_status := ppu.status
         // After the register is read, the VBlanking flag is set to 0
@@ -193,7 +227,11 @@ ppu_mem_read :: proc(ppu: ^PPU, address: u16) -> (bool, u8) {
 
     if address == 0x2007 {
         current_buf := ppu.vram_data_buffer
-        ppu.vram_data_buffer = ppu.vram[double_write_as_u16(ppu.vram_address)]
+        ppu.vram_data_buffer = ppu_vram_read(
+            ppu,
+            mapper,
+            double_write_as_u16(ppu.vram_address),
+        )
         ppuaddr_increment(ppu)
 
         return true, current_buf
@@ -202,7 +240,12 @@ ppu_mem_read :: proc(ppu: ^PPU, address: u16) -> (bool, u8) {
     return false, 0
 }
 
-ppu_mem_write :: proc(ppu: ^PPU, address: u16, val: u8) -> bool {
+ppu_mem_write :: proc(
+    ppu: ^PPU,
+    mapper: ^mappers.NROM,
+    address: u16,
+    val: u8,
+) -> bool {
     if address == 0x2002 {
         // PPUSTATUS is read-only, return.
         return true
@@ -224,7 +267,7 @@ ppu_mem_write :: proc(ppu: ^PPU, address: u16, val: u8) -> bool {
     }
 
     if address == 0x2007 {
-        ppu.vram[double_write_as_u16(ppu.vram_address)] = val
+        ppu_vram_write(ppu, mapper, double_write_as_u16(ppu.vram_address), val)
         ppuaddr_increment(ppu)
         return true
     }
