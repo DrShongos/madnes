@@ -10,7 +10,9 @@ import sdl "vendor:sdl3"
 
 Emulator :: struct {
     window:           ^sdl.Window,
+    surface:          ^sdl.Surface,
     renderer:         ^sdl.Renderer,
+    ppu_texture:      ^sdl.Texture,
     emulated_console: console.Console,
 }
 
@@ -28,11 +30,21 @@ setup_window :: proc(emulator: ^Emulator) {
         os.exit(-1)
     }
 
-    emulator.renderer = sdl.CreateRenderer(emulator.window, "")
+    emulator.surface = sdl.GetWindowSurface(emulator.window)
+    emulator.renderer = sdl.CreateSoftwareRenderer(emulator.surface)
+
     if emulator.renderer == nil {
         fmt.eprintf("Failed to create the Renderer: %s", sdl.GetError())
         os.exit(-1)
     }
+
+    emulator.ppu_texture = sdl.CreateTexture(
+        emulator.renderer,
+        .RGBA32,
+        .STREAMING,
+        8,
+        8,
+    )
 }
 
 emulator_new :: proc(filepath: string) -> Emulator {
@@ -68,8 +80,45 @@ emulator_run :: proc(emulator: ^Emulator) {
 
         console.console_tick(&emulator.emulated_console)
 
-        sdl.RenderPresent(emulator.renderer)
+        emulator_render(emulator)
+
     }
+}
+
+emulator_render :: proc(emulator: ^Emulator) {
+    sample_tile := console.ppu_render_tile(
+        &emulator.emulated_console.ppu,
+        &emulator.emulated_console.mapper,
+        3,
+        0x0000,
+    )
+    fmt.println(sample_tile)
+
+    sdl.UpdateTexture(
+        emulator.ppu_texture,
+        nil,
+        &sample_tile,
+        8 * size_of(u32),
+    )
+
+    sdl.RenderClear(emulator.renderer)
+
+
+    render_target := sdl.FRect {
+        x = 0.0,
+        y = 0.0,
+        w = 24.0,
+        h = 24.0,
+    }
+    sdl.RenderTexture(
+        emulator.renderer,
+        emulator.ppu_texture,
+        nil,
+        &render_target,
+    )
+
+    sdl.RenderPresent(emulator.renderer)
+    sdl.UpdateWindowSurface(emulator.window)
 }
 
 emulator_delete :: proc(emulator: ^Emulator) {

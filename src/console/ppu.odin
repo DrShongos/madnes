@@ -1,5 +1,6 @@
 package console
 
+import "core:fmt"
 import "mappers"
 
 PPU_VRAM_SIZE :: 0x2000
@@ -277,4 +278,70 @@ ppu_mem_write :: proc(
 
 ppu_tick :: proc(ppu: ^PPU) {
 
+}
+
+ppu_render_tile :: proc(
+    ppu: ^PPU,
+    mapper: ^mappers.NROM,
+    pattern_table_index: int,
+    pattern_start: u16,
+) -> [64]u32 {
+    first_plane := pattern_start + u16(pattern_table_index * 16)
+    second_plane := pattern_start + u16(pattern_table_index * 16) + 8
+
+    tile_data: [64]u32
+
+    color_index := 0
+    for pixel_offset in 0 ..< 8 {
+        first_plane_layer := ppu_vram_read(
+            ppu,
+            mapper,
+            first_plane + u16(pixel_offset),
+        )
+        second_plane_layer := ppu_vram_read(
+            ppu,
+            mapper,
+            second_plane + u16(pixel_offset),
+        )
+
+        // Go through each bit of the current layers, while checking both planes
+        // The test specifies the color in the following way:
+        // Both bits in both planes set to 0: Background/Transparent
+        // First plane set, second plane clear: Color 1,
+        // First plane clear, second plane set: Color 2,
+        // Both planes set: Color 3
+        bit_test: u8 = 0x80
+        for _ in 0 ..< 8 {
+            first_plane_test := first_plane_layer & bit_test
+            second_plane_test := second_plane_layer & bit_test
+
+            if first_plane_test != 0 && second_plane_test == 0 {
+                tile_data[color_index] |= 0xff000000
+                fmt.printf("x")
+            }
+
+            if first_plane_test == 0 && second_plane_test != 0 {
+                tile_data[color_index] |= 0x00ff0000
+                fmt.printf("y")
+            }
+
+            if first_plane_test != 0 && second_plane_test != 0 {
+                tile_data[color_index] |= 0x0000ff00
+                fmt.printf("z")
+            }
+
+            if first_plane_test == 0 && second_plane_test == 0 {
+                fmt.printf(".")
+            }
+
+            tile_data[color_index] |= 0x000000ff
+
+            color_index += 1
+
+            bit_test /= 2
+        }
+        fmt.printf("\n")
+    }
+
+    return tile_data
 }

@@ -51,8 +51,6 @@ console_tick :: proc(console: ^Console) {
 
     cpu_tick(&console.cpu)
 
-    //fmt.println("up")
-
     if console.ppu.initialized {
         for _ in 0 ..< console.cpu.cycle {
             // The PPU ticks 3 times for each CPU cycle
@@ -61,8 +59,6 @@ console_tick :: proc(console: ^Console) {
             ppu_tick(&console.ppu)
         }
     }
-
-    //fmt.println("bibi")
 
     if console.cpu.total_cycles >= PPU_WARMUP_CYCLE {
         ppu_init(&console.ppu)
