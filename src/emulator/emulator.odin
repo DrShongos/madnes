@@ -42,8 +42,8 @@ setup_window :: proc(emulator: ^Emulator) {
         emulator.renderer,
         .RGBA32,
         .STREAMING,
-        8,
-        8,
+        256,
+        240,
     )
 }
 
@@ -86,36 +86,26 @@ emulator_run :: proc(emulator: ^Emulator) {
 }
 
 emulator_render :: proc(emulator: ^Emulator) {
-    sample_tile := console.ppu_render_tile(
+    console.ppu_render_tile(
         &emulator.emulated_console.ppu,
         &emulator.emulated_console.mapper,
         3,
         0x0000,
+        0,
+        0,
     )
-    fmt.println(sample_tile)
 
     sdl.UpdateTexture(
         emulator.ppu_texture,
         nil,
-        &sample_tile,
-        8 * size_of(u32),
+        &emulator.emulated_console.ppu.frame,
+        256 * size_of(u32),
     )
 
     sdl.RenderClear(emulator.renderer)
 
 
-    render_target := sdl.FRect {
-        x = 0.0,
-        y = 0.0,
-        w = 24.0,
-        h = 24.0,
-    }
-    sdl.RenderTexture(
-        emulator.renderer,
-        emulator.ppu_texture,
-        nil,
-        &render_target,
-    )
+    sdl.RenderTexture(emulator.renderer, emulator.ppu_texture, nil, nil)
 
     sdl.RenderPresent(emulator.renderer)
     sdl.UpdateWindowSurface(emulator.window)

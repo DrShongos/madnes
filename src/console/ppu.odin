@@ -11,6 +11,10 @@ PPU_SPRITE_ZERO :: 0x40
 PPU_VBLANK :: 0x80
 PPU_BUS_BITS :: 0x1f
 
+// PPU FRAME INFO
+PPU_FRAME_WIDTH :: 256
+PPU_FRAME_HEIGHT :: 240
+
 PPU_Ctrl_Flag :: enum {
     // Toggled at the end of the NMI interrupt
     VBlank_NMI_Output                = 7,
@@ -99,6 +103,9 @@ PPU :: struct {
     // (false - first, true - second)
     write_latch:      bool,
     initialized:      bool,
+
+    // The image produced by the PPU
+    frame:            [PPU_FRAME_WIDTH * PPU_FRAME_HEIGHT]u32,
 }
 
 ppu_new :: proc() -> PPU {
@@ -285,13 +292,16 @@ ppu_render_tile :: proc(
     mapper: ^mappers.NROM,
     pattern_table_index: int,
     pattern_start: u16,
-) -> [64]u32 {
+    x: int,
+    y: int,
+) {
     first_plane := pattern_start + u16(pattern_table_index * 16)
     second_plane := pattern_start + u16(pattern_table_index * 16) + 8
 
-    tile_data: [64]u32
-
     color_index := 0
+
+    y_start := y
+
     for pixel_offset in 0 ..< 8 {
         first_plane_layer := ppu_vram_read(
             ppu,
@@ -304,6 +314,8 @@ ppu_render_tile :: proc(
             second_plane + u16(pixel_offset),
         )
 
+        y := y_start + pixel_offset
+
         // Go through each bit of the current layers, while checking both planes
         // The test specifies the color in the following way:
         // Both bits in both planes set to 0: Background/Transparent
@@ -311,22 +323,27 @@ ppu_render_tile :: proc(
         // First plane clear, second plane set: Color 2,
         // Both planes set: Color 3
         bit_test: u8 = 0x80
-        for _ in 0 ..< 8 {
+
+        x_start := x
+
+        for x_offset in 0 ..< 8 {
             first_plane_test := first_plane_layer & bit_test
             second_plane_test := second_plane_layer & bit_test
 
+            x := x_start + x_offset
+
             if first_plane_test != 0 && second_plane_test == 0 {
-                tile_data[color_index] |= 0xff000000
+                ppu_frame_set_pixel(ppu, x, y, 0xff, 0, 0)
                 fmt.printf("x")
             }
 
             if first_plane_test == 0 && second_plane_test != 0 {
-                tile_data[color_index] |= 0x00ff0000
+                ppu_frame_set_pixel(ppu, x, y, 0, 0xff, 0)
                 fmt.printf("y")
             }
 
             if first_plane_test != 0 && second_plane_test != 0 {
-                tile_data[color_index] |= 0x0000ff00
+                ppu_frame_set_pixel(ppu, x, y, 0, 0, 0xff)
                 fmt.printf("z")
             }
 
@@ -334,14 +351,21 @@ ppu_render_tile :: proc(
                 fmt.printf(".")
             }
 
-            tile_data[color_index] |= 0x000000ff
-
-            color_index += 1
-
             bit_test /= 2
+
         }
         fmt.printf("\n")
     }
+}
 
-    return tile_data
+ppu_frame_set_pixel :: proc(ppu: ^PPU, x: int, y: int, r: u8, g: u8, b: u8) {
+    pixel_coords := (y * PPU_FRAME_WIDTH) + x
+
+    // Pixel data is stored in a RGBA32 format.
+    ppu.frame[pixel_coords] |= u32(r) << 24
+    ppu.frame[pixel_coords] |= u32(g) << 16
+    ppu.frame[pixel_coords] |= u32(b) << 8
+
+    // Add a filled alpha channel at the end
+    ppu.frame[pixel_coords] |= 0x000000ff
 }
