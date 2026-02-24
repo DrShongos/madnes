@@ -334,27 +334,22 @@ ppu_render_tile :: proc(
 
             if first_plane_test != 0 && second_plane_test == 0 {
                 ppu_frame_set_pixel(ppu, x, y, 0xff, 0, 0)
-                fmt.printf("x")
             }
 
             if first_plane_test == 0 && second_plane_test != 0 {
                 ppu_frame_set_pixel(ppu, x, y, 0, 0xff, 0)
-                fmt.printf("y")
             }
 
             if first_plane_test != 0 && second_plane_test != 0 {
                 ppu_frame_set_pixel(ppu, x, y, 0, 0, 0xff)
-                fmt.printf("z")
             }
 
             if first_plane_test == 0 && second_plane_test == 0 {
-                fmt.printf(".")
             }
 
             bit_test /= 2
 
         }
-        fmt.printf("\n")
     }
 }
 
@@ -362,10 +357,10 @@ ppu_frame_set_pixel :: proc(ppu: ^PPU, x: int, y: int, r: u8, g: u8, b: u8) {
     pixel_coords := (y * PPU_FRAME_WIDTH) + x
 
     // Pixel data is stored in a RGBA32 format.
-    ppu.frame[pixel_coords] |= u32(r) << 24
-    ppu.frame[pixel_coords] |= u32(g) << 16
-    ppu.frame[pixel_coords] |= u32(b) << 8
+    ppu.frame[pixel_coords] |= u32(r)
+    ppu.frame[pixel_coords] |= u32(g) << 8
+    ppu.frame[pixel_coords] |= u32(b) << 16
 
-    // Add a filled alpha channel at the end
-    ppu.frame[pixel_coords] |= 0x000000ff
+    // Add a filled alpha channel at the start
+    ppu.frame[pixel_coords] |= 0xff << 24
 }

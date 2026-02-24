@@ -64,6 +64,7 @@ emulator_new :: proc(filepath: string) -> Emulator {
     console.console_load_cartridge(&emulator.emulated_console, &ines_format)
 
     setup_window(&emulator)
+    emulator_pattern_table_dump(&emulator, 0)
 
     return emulator
 }
@@ -85,21 +86,29 @@ emulator_run :: proc(emulator: ^Emulator) {
     }
 }
 
+// A debug function that renders all the tiles within the specified pattern table
+emulator_pattern_table_dump :: proc(emulator: ^Emulator, pattern_table: u16) {
+    for pattern_index in 0 ..= 0xff {
+        x := pattern_index % 0x10
+        y := pattern_index >> 4
+        console.ppu_render_tile(
+            &emulator.emulated_console.ppu,
+            &emulator.emulated_console.mapper,
+            pattern_index,
+            pattern_table * 0x1000,
+            8 * x,
+            8 * y,
+        )
+    }
+}
+
 emulator_render :: proc(emulator: ^Emulator) {
-    console.ppu_render_tile(
-        &emulator.emulated_console.ppu,
-        &emulator.emulated_console.mapper,
-        3,
-        0x0000,
-        0,
-        0,
-    )
 
     sdl.UpdateTexture(
         emulator.ppu_texture,
         nil,
         &emulator.emulated_console.ppu.frame,
-        256 * size_of(u32),
+        256 * size_of(i32),
     )
 
     sdl.RenderClear(emulator.renderer)
