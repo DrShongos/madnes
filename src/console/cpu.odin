@@ -129,6 +129,13 @@ cpu_mem_read :: proc(cpu: ^CPU, address: u16) -> u8 {
         return ppu_byte
     }
 
+    return cpu_peek_memory(cpu, address)
+}
+
+/// Accessed the program's memory without affecting the registers
+/// Of the console's components
+@(private)
+cpu_peek_memory :: proc(cpu: ^CPU, address: u16) -> u8 {
     // Check the cartridge
     cartridge_accessed, cartridge_byte := mappers.nrom_mem_read(
         &cpu.console.mapper,
@@ -220,7 +227,7 @@ cpu_instruction_trace :: proc(cpu: ^CPU, instruction: ^Instruction) {
     fmt.printf(
         "%x %x ",
         cpu.program_counter,
-        cpu_mem_read(cpu, cpu.program_counter),
+        cpu_peek_memory(cpu, cpu.program_counter),
     )
 
     // TODO: Addressing Mode
@@ -238,8 +245,8 @@ cpu_instruction_trace :: proc(cpu: ^CPU, instruction: ^Instruction) {
     case .Absolute, .Absolute_X, .Absolute_Y, .Indirect:
         fmt.printf(
             "%x %x ",
-            cpu_mem_read(cpu, cpu.program_counter + 1),
-            cpu_mem_read(cpu, cpu.program_counter + 2),
+            cpu_peek_memory(cpu, cpu.program_counter + 1),
+            cpu_peek_memory(cpu, cpu.program_counter + 2),
         )
     }
     // Opcode name
@@ -247,50 +254,50 @@ cpu_instruction_trace :: proc(cpu: ^CPU, instruction: ^Instruction) {
     #partial switch instruction.addressing_mode {
     case .Absolute:
         addr := bytes_to_address(
-            cpu_mem_read(cpu, cpu.program_counter + 1),
-            cpu_mem_read(cpu, cpu.program_counter + 2),
+            cpu_peek_memory(cpu, cpu.program_counter + 1),
+            cpu_peek_memory(cpu, cpu.program_counter + 2),
         )
-        fmt.printf("$%x = $%x", addr, cpu_mem_read(cpu, addr))
+        fmt.printf("$%x = $%x", addr, cpu_peek_memory(cpu, addr))
     case .Absolute_X:
         fmt.printf(
             "$%x,X ",
             bytes_to_address(
-                cpu_mem_read(cpu, cpu.program_counter + 1),
-                cpu_mem_read(cpu, cpu.program_counter + 2),
+                cpu_peek_memory(cpu, cpu.program_counter + 1),
+                cpu_peek_memory(cpu, cpu.program_counter + 2),
             ),
         )
     case .Absolute_Y:
         fmt.printf(
             "$%x,Y ",
             bytes_to_address(
-                cpu_mem_read(cpu, cpu.program_counter + 1),
-                cpu_mem_read(cpu, cpu.program_counter + 2),
+                cpu_peek_memory(cpu, cpu.program_counter + 1),
+                cpu_peek_memory(cpu, cpu.program_counter + 2),
             ),
         )
     case .Indirect:
         fmt.printf(
             "(%x) ",
             bytes_to_address(
-                cpu_mem_read(cpu, cpu.program_counter + 1),
-                cpu_mem_read(cpu, cpu.program_counter + 2),
+                cpu_peek_memory(cpu, cpu.program_counter + 1),
+                cpu_peek_memory(cpu, cpu.program_counter + 2),
             ),
         )
     case .Accumulator:
         fmt.printf("A ")
     case .Immediate:
-        fmt.printf("#%x ", cpu_mem_read(cpu, cpu.program_counter + 1))
+        fmt.printf("#%x ", cpu_peek_memory(cpu, cpu.program_counter + 1))
     case .Zero_Page:
-        fmt.printf("$%x ", cpu_mem_read(cpu, cpu.program_counter + 1))
+        fmt.printf("$%x ", cpu_peek_memory(cpu, cpu.program_counter + 1))
     case .Zero_Page_X:
-        fmt.printf("$%x,X ", cpu_mem_read(cpu, cpu.program_counter + 1))
+        fmt.printf("$%x,X ", cpu_peek_memory(cpu, cpu.program_counter + 1))
     case .Zero_Page_Y:
-        fmt.printf("$%x,Y ", cpu_mem_read(cpu, cpu.program_counter + 1))
+        fmt.printf("$%x,Y ", cpu_peek_memory(cpu, cpu.program_counter + 1))
     case .Indexed_Indirect:
-        fmt.printf("($%x,X) ", cpu_mem_read(cpu, cpu.program_counter + 1))
+        fmt.printf("($%x,X) ", cpu_peek_memory(cpu, cpu.program_counter + 1))
     case .Indirect_Indexed:
-        fmt.printf("($%x),Y ", cpu_mem_read(cpu, cpu.program_counter + 1))
+        fmt.printf("($%x),Y ", cpu_peek_memory(cpu, cpu.program_counter + 1))
     case .Relative:
-        fmt.printf("*.%d ", i8(cpu_mem_read(cpu, cpu.program_counter + 1)))
+        fmt.printf("*.%d ", i8(cpu_peek_memory(cpu, cpu.program_counter + 1)))
     case .Implied:
         fmt.printf("     ")
     }

@@ -57,7 +57,7 @@ console_tick :: proc(console: ^Console) {
     //    ppu_tick(&console.ppu, &console.mapper)
     //    ppu_tick(&console.ppu, &console.mapper)
     //}
-    ppu_tick(&console.ppu, &console.mapper)
+    ppu_tick(&console.ppu, console)
 
 
     if console.cpu.total_cycles >= PPU_WARMUP_CYCLE {

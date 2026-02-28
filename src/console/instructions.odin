@@ -268,6 +268,8 @@ rts: Instruction_Code : proc(
     cpu.program_counter = bytes_to_address(pc_hi, pc_lo)
     cpu.cycle += 3
 
+    cpu._interrupt_ongoing = false
+
     cpu_advance(cpu)
 }
 
@@ -289,6 +291,9 @@ rti: Instruction_Code : proc(
 
     cpu.program_counter = bytes_to_address(pc_hi, pc_lo)
     cpu.cycle += 3
+
+    cpu._interrupt_ongoing = false
+
 }
 
 ldx: Instruction_Code : proc(

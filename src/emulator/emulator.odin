@@ -45,6 +45,7 @@ setup_window :: proc(emulator: ^Emulator) {
         256,
         240,
     )
+    sdl.SetTextureScaleMode(emulator.ppu_texture, .NEAREST)
 }
 
 emulator_new :: proc(filepath: string) -> Emulator {

@@ -111,8 +111,11 @@ PPU :: struct {
     write_latch:      bool,
     initialized:      bool,
 
+    ///////////// RENDERING CONTROL /////////////////////////////
     // The image produced by the PPU
     frame:            [PPU_FRAME_WIDTH * PPU_FRAME_HEIGHT]u32,
+    cycles:           int,
+    scanline:         int,
 }
 
 ppu_new :: proc() -> PPU {
@@ -245,10 +248,17 @@ ppu_mem_read :: proc(
     bool,
     u8,
 ) {
+    address := address
+    if address >= 0x2000 && address <= 0x3fff {
+        address %= 0x2008
+        address = address
+    }
+
     if address == 0x2002 {
         ppu_status := ppu.status
-        // After the register is read, the VBlanking flag is set to 0
-        //ppu.status = clear_bit(ppu.status, PPU_VBLANK)
+
+        // After the register has been read, the VBlanking flag is set to 0
+        ppu.status = clear_bit(ppu.status, PPU_VBLANK)
 
         return true, ppu_status
     }
@@ -288,6 +298,16 @@ ppu_mem_write :: proc(
     address: u16,
     val: u8,
 ) -> bool {
+    address := address
+    if address >= 0x2000 && address <= 0x3fff {
+        address %= 0x2008
+        address = address
+    }
+
+    if address == 0x2000 {
+        ppu.ctrl = transmute(PPU_Ctrl)val
+    }
+
     if address == 0x2002 {
         // PPUSTATUS is read-only, return.
         return true
@@ -317,8 +337,32 @@ ppu_mem_write :: proc(
     return false
 }
 
-ppu_tick :: proc(ppu: ^PPU, mapper: ^mappers.NROM) {
-    ppu_render_nametable(ppu, mapper)
+ppu_tick :: proc(ppu: ^PPU, console: ^Console) {
+    if ppu.cycles >= 341 {
+        ppu.cycles = 0
+        ppu.scanline += 1
+    }
+
+    if ppu.scanline >= 0 && ppu.scanline <= 240 {
+        ppu_render_nametable(ppu, &console.mapper)
+    }
+
+    if ppu.scanline == 241 {
+        ppu.status = set_bit(ppu.status, PPU_VBLANK)
+    }
+
+    if ppu.scanline == 261 {
+        ppu.status = clear_bit(ppu.status, PPU_VBLANK)
+        ppu.scanline = -1
+    }
+
+    if .VBlank_NMI_Output in ppu.ctrl && ppu.status & PPU_VBLANK != 0 {
+        console.cpu.nmi_requested = true
+        ppu.status = clear_bit(ppu.status, PPU_VBLANK)
+    }
+
+
+    ppu.cycles += 3
 }
 
 // Gets the nametable address from the PPUCTRL flags
@@ -428,6 +472,8 @@ ppu_render_tile :: proc(
 
             x := x_start + x_offset
 
+            // Clear the pixel
+            ppu_clear_pixel(ppu, x, y)
             if first_plane_test != 0 && second_plane_test == 0 {
                 ppu_frame_set_pixel(ppu, x, y, 0xff, 0, 0)
             }
@@ -440,13 +486,15 @@ ppu_render_tile :: proc(
                 ppu_frame_set_pixel(ppu, x, y, 0, 0, 0xff)
             }
 
-            if first_plane_test == 0 && second_plane_test == 0 {
-            }
-
             bit_test /= 2
 
         }
     }
+}
+
+ppu_clear_pixel :: proc(ppu: ^PPU, x: int, y: int) {
+    pixel_coords := (y * PPU_FRAME_WIDTH) + x
+    ppu.frame[pixel_coords] = 0
 }
 
 ppu_frame_set_pixel :: proc(ppu: ^PPU, x: int, y: int, r: u8, g: u8, b: u8) {
