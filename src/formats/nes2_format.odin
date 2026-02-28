@@ -87,7 +87,7 @@ parse_mapper_number :: proc(format: ^NES2_0_Format, data: []u8) {
 
 @(private)
 parse_rom_msbs :: proc(format: ^NES2_0_Format, data: []u8) {
-    format.chr_rom_size |= u16(data[9] & 0xf0) << 8
+    format.chr_rom_size |= (u16(data[9] & 0xf0) << 4)
     format.prg_rom_size |= u16(data[9] & 0x0f) << 8
 }
 
@@ -172,6 +172,7 @@ load_rom_data :: proc(format: ^NES2_0_Format, data: []u8) {
 
     // ROM Sizes are represented in units of blocks of memory,
     // 16kb and 8kb for PRG and CHR rom, respectively
+    fmt.printfln("chr rom unit: %x", format.chr_rom_size)
     format.prg_rom_size = format.prg_rom_size * PRG_ROM_SIZE_UNIT
     format.chr_rom_size = format.chr_rom_size * CHR_ROM_SIZE_UNIT
 
@@ -216,4 +217,3 @@ nes2_0_parse :: proc(data: []u8) -> NES2_0_Format {
 
     return rom_file
 }
-

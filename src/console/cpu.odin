@@ -32,11 +32,6 @@ CPU_Status_Flags :: enum {
     Carry             = 0,
 }
 
-Interrupt_Type :: enum {
-    IRQ,
-    NMI,
-}
-
 CPU_Status :: bit_set[CPU_Status_Flags]
 
 CPU :: struct {
@@ -56,6 +51,12 @@ CPU :: struct {
     // The update to the CPU status gets delayed to the start of the next instruction
     // So that an ongoing Interrupt could be finished.
     disable_interrupt_update: bool,
+    interrupt_requested:      bool,
+    nmi_requested:            bool,
+
+    // Describes whether there's an ongoing interrupt.
+    // Used to control an edge case where both the NMI and IRQ interrupts have been polled.
+    _interrupt_ongoing:       bool,
 
     // The amount of cycles used to perform the instruction
     cycle:                    u8,
@@ -87,6 +88,8 @@ cpu_new :: proc() -> CPU {
         instruction_set          = instruction_set_create(),
         total_cycles             = 0,
         disable_interrupt_update = false,
+        interrupt_requested      = false,
+        nmi_requested            = false,
     }
 
     mem_reset(&cpu)
@@ -304,6 +307,29 @@ cpu_instruction_trace :: proc(cpu: ^CPU, instruction: ^Instruction) {
     )
 }
 
+@(private)
+goto_interrupt :: proc(cpu: ^CPU, interrupt_address: u16) {
+    return_hi, return_lo := address_to_bytes(cpu.program_counter)
+
+    stack_push(cpu, return_lo)
+    cpu.cycle += 1
+
+    stack_push(cpu, return_hi)
+    cpu.cycle += 1
+
+    stack_push(cpu, transmute(u8)cpu.status)
+
+    pc_lo := cpu_mem_read(cpu, interrupt_address)
+    cpu.cycle += 1
+    pc_hi := cpu_mem_read(cpu, interrupt_address + 1)
+    cpu.cycle += 1
+
+    cpu.program_counter = bytes_to_address(pc_lo, pc_hi)
+    cpu.cycle += 1
+
+    cpu._interrupt_ongoing = true
+}
+
 cpu_tick :: proc(cpu: ^CPU) {
     cpu.cycle = 0
 
@@ -317,6 +343,16 @@ cpu_tick :: proc(cpu: ^CPU) {
 
     cpu_instruction_trace(cpu, &instruction)
     instruction.execute(cpu, instruction.addressing_mode)
+
+    if cpu.nmi_requested && !cpu._interrupt_ongoing {
+        goto_interrupt(cpu, 0xfffa)
+        cpu.nmi_requested = false
+    }
+
+    if cpu.interrupt_requested && !cpu._interrupt_ongoing {
+        goto_interrupt(cpu, 0xfffe)
+        cpu.interrupt_requested = false
+    }
 
     cpu.total_cycles += u64(cpu.cycle)
 }

@@ -51,14 +51,14 @@ console_tick :: proc(console: ^Console) {
 
     cpu_tick(&console.cpu)
 
-    if console.ppu.initialized {
-        for _ in 0 ..< console.cpu.cycle {
-            // The PPU ticks 3 times for each CPU cycle
-            ppu_tick(&console.ppu)
-            ppu_tick(&console.ppu)
-            ppu_tick(&console.ppu)
-        }
-    }
+    //for _ in 0 ..< console.cpu.cycle {
+    //    // The PPU ticks 3 times for each CPU cycle
+    //    ppu_tick(&console.ppu, &console.mapper)
+    //    ppu_tick(&console.ppu, &console.mapper)
+    //    ppu_tick(&console.ppu, &console.mapper)
+    //}
+    ppu_tick(&console.ppu, &console.mapper)
+
 
     if console.cpu.total_cycles >= PPU_WARMUP_CYCLE {
         ppu_init(&console.ppu)

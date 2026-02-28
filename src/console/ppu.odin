@@ -15,6 +15,13 @@ PPU_BUS_BITS :: 0x1f
 PPU_FRAME_WIDTH :: 256
 PPU_FRAME_HEIGHT :: 240
 
+PPU_NAMETABLE_SIZE :: 0x3c0
+
+NAMETABLE_0 :: 0x2000
+NAMETABLE_1 :: 0x2400
+NAMETABLE_2 :: 0x2800
+NAMETABLE_3 :: 0x2C00
+
 PPU_Ctrl_Flag :: enum {
     // Toggled at the end of the NMI interrupt
     VBlank_NMI_Output                = 7,
@@ -178,12 +185,35 @@ ppuaddr_increment :: proc(ppu: ^PPU) {
     }
 }
 
+@(private)
+nametable_mirror :: proc(mapper: ^mappers.NROM, address: u16) -> u16 {
+    if mapper.nametable_mirroring == .Horizontal {
+        if address >= NAMETABLE_2 {
+            return address - 0x0800
+        }
+
+        return address
+    }
+
+    if (address >= NAMETABLE_1 && address <= NAMETABLE_2) ||
+       (address >= NAMETABLE_3) {
+        return address - 0x0400
+    }
+
+    return address
+}
+
 // A wrapper function to fetch CHR memory from all the console's components
 @(private)
 ppu_vram_read :: proc(ppu: ^PPU, mapper: ^mappers.NROM, address: u16) -> u8 {
     mapper_accessed, mapper_byte := mappers.nrom_ppu_read(mapper, address)
     if mapper_accessed {
         return mapper_byte
+    }
+
+    if address >= 0x2000 && address <= 0x2fff {
+        nametable_address := nametable_mirror(mapper, address)
+        return ppu.vram[nametable_address % PPU_VRAM_SIZE]
     }
 
     // TODO: (0x3f00-0x3fff) SHOULD BE CONFIGURED TO RETURN DATA FROM THE PALETTE TABLE
@@ -200,6 +230,10 @@ ppu_vram_write :: proc(
 ) {
     // TODO: Configure to handle mappers (once a mapper with CHR-RAM gets implemented)
     // And exclude the palette table
+    if address >= 0x2000 && address <= 0x2fff {
+        nametable_address := nametable_mirror(mapper, address)
+        ppu.vram[nametable_address % PPU_VRAM_SIZE] = val
+    }
     ppu.vram[address % PPU_VRAM_SIZE] = val
 }
 
@@ -214,7 +248,7 @@ ppu_mem_read :: proc(
     if address == 0x2002 {
         ppu_status := ppu.status
         // After the register is read, the VBlanking flag is set to 0
-        ppu.status = clear_bit(ppu.status, PPU_VBLANK)
+        //ppu.status = clear_bit(ppu.status, PPU_VBLANK)
 
         return true, ppu_status
     }
@@ -283,8 +317,70 @@ ppu_mem_write :: proc(
     return false
 }
 
-ppu_tick :: proc(ppu: ^PPU) {
+ppu_tick :: proc(ppu: ^PPU, mapper: ^mappers.NROM) {
+    ppu_render_nametable(ppu, mapper)
+}
 
+// Gets the nametable address from the PPUCTRL flags
+@(private)
+get_nametable_base_address :: proc(ppu: ^PPU) -> u16 {
+    nametable_address_flags: PPU_Ctrl = {
+        .Base_Nametable_Address_Bit_2,
+        .Base_Nametable_Address_Bit_1,
+    }
+
+    nametable_ctrl := transmute(u8)(ppu.ctrl & nametable_address_flags)
+
+    if nametable_ctrl == 1 {
+        return NAMETABLE_1
+    }
+
+    if nametable_ctrl == 2 {
+        return NAMETABLE_2
+    }
+
+    if nametable_ctrl == 3 {
+        return NAMETABLE_3
+    }
+
+    // Nametable Address bits are equal to 0
+    return NAMETABLE_0
+}
+
+nametable_pattern_start :: proc(ppu: ^PPU) -> u16 {
+    if .Background_Pattern_Table_Address in ppu.ctrl {
+        return 0x1000
+    }
+
+    return 0x0000
+}
+
+ppu_render_nametable :: proc(ppu: ^PPU, mapper: ^mappers.NROM) {
+    nametable_addr := get_nametable_base_address(ppu)
+
+    nametable_end := nametable_addr + PPU_NAMETABLE_SIZE
+
+    x: int = 0
+    y: int = 0
+
+    for nametable_entry in nametable_addr ..< nametable_end {
+        // Nametables have 30 rows of 32 tiles
+        tile_index := ppu_vram_read(ppu, mapper, nametable_entry)
+        ppu_render_tile(
+            ppu,
+            mapper,
+            int(tile_index),
+            nametable_pattern_start(ppu),
+            8 * x,
+            8 * y,
+        )
+
+        x += 1
+        if x % 32 == 0 {
+            x = 0
+            y += 1
+        }
+    }
 }
 
 ppu_render_tile :: proc(

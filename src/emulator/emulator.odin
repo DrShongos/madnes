@@ -64,7 +64,6 @@ emulator_new :: proc(filepath: string) -> Emulator {
     console.console_load_cartridge(&emulator.emulated_console, &ines_format)
 
     setup_window(&emulator)
-    emulator_pattern_table_dump(&emulator, 0)
 
     return emulator
 }
