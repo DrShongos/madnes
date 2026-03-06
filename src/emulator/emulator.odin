@@ -81,7 +81,7 @@ emulator_run :: proc(emulator: ^Emulator) {
 
         console.console_tick(&emulator.emulated_console)
 
-        emulator_render(emulator)
+        //emulator_render(emulator)
 
     }
 }
@@ -103,13 +103,15 @@ emulator_pattern_table_dump :: proc(emulator: ^Emulator, pattern_table: u16) {
 }
 
 emulator_render :: proc(emulator: ^Emulator) {
-
-    sdl.UpdateTexture(
-        emulator.ppu_texture,
-        nil,
-        &emulator.emulated_console.ppu.frame,
-        256 * size_of(i32),
-    )
+    if emulator.emulated_console.ppu.scanline == 241 {
+        console.ppu_render_nametable(&emulator.emulated_console.ppu, &emulator.emulated_console.mapper)
+        sdl.UpdateTexture(
+            emulator.ppu_texture,
+            nil,
+            &emulator.emulated_console.ppu.frame,
+            256 * size_of(i32),
+        )
+    }
 
     sdl.RenderClear(emulator.renderer)
 

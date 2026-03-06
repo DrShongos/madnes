@@ -259,6 +259,7 @@ ppu_mem_read :: proc(
 
         // After the register has been read, the VBlanking flag is set to 0
         ppu.status = clear_bit(ppu.status, PPU_VBLANK)
+        ppu.write_latch = false
 
         return true, ppu_status
     }
@@ -294,7 +295,7 @@ ppu_mem_read :: proc(
 
 ppu_mem_write :: proc(
     ppu: ^PPU,
-    mapper: ^mappers.NROM,
+    console: ^Console,
     address: u16,
     val: u8,
 ) -> bool {
@@ -305,7 +306,16 @@ ppu_mem_write :: proc(
     }
 
     if address == 0x2000 {
+        nmi_pre_update := .VBlank_NMI_Output in ppu.ctrl
         ppu.ctrl = transmute(PPU_Ctrl)val
+
+        nmi_post_update := .VBlank_NMI_Output in ppu.ctrl
+        if !nmi_pre_update &&
+           nmi_post_update &&
+           (ppu.status & PPU_VBLANK != 0) {
+                ppu.status = clear_bit(ppu.status, PPU_VBLANK)
+                console.cpu.nmi_requested = true
+        }
     }
 
     if address == 0x2002 {
@@ -329,7 +339,12 @@ ppu_mem_write :: proc(
     }
 
     if address == 0x2007 {
-        ppu_vram_write(ppu, mapper, double_write_as_u16(ppu.vram_address), val)
+        ppu_vram_write(
+            ppu,
+            &console.mapper,
+            double_write_as_u16(ppu.vram_address),
+            val,
+        )
         ppuaddr_increment(ppu)
         return true
     }
@@ -344,16 +359,12 @@ ppu_tick :: proc(ppu: ^PPU, console: ^Console) {
     }
 
     if ppu.scanline >= 0 && ppu.scanline <= 240 {
-        ppu_render_nametable(ppu, &console.mapper)
+        // TODO: PPU Rendering has been temporarily moved outside of the actual ticking to improve performance
+        // Move it back here once (and if) the work on scanline rendering begins.
     }
 
     if ppu.scanline == 241 {
         ppu.status = set_bit(ppu.status, PPU_VBLANK)
-    }
-
-    if ppu.scanline == 261 {
-        ppu.status = clear_bit(ppu.status, PPU_VBLANK)
-        ppu.scanline = -1
     }
 
     if .VBlank_NMI_Output in ppu.ctrl && ppu.status & PPU_VBLANK != 0 {
@@ -361,8 +372,13 @@ ppu_tick :: proc(ppu: ^PPU, console: ^Console) {
         ppu.status = clear_bit(ppu.status, PPU_VBLANK)
     }
 
+    if ppu.scanline >= 261 {
+        ppu.status = clear_bit(ppu.status, PPU_VBLANK)
+        ppu.scanline = -1
+    }
 
-    ppu.cycles += 3
+
+    ppu.cycles += 1
 }
 
 // Gets the nametable address from the PPUCTRL flags

@@ -172,7 +172,7 @@ cpu_mem_write :: proc(cpu: ^CPU, address: u16, value: u8) {
     // Check the PPU
     ppu_accessed := ppu_mem_write(
         &cpu.console.ppu,
-        &cpu.console.mapper,
+        cpu.console,
         address,
         value,
     )
@@ -317,6 +317,7 @@ cpu_instruction_trace :: proc(cpu: ^CPU, instruction: ^Instruction) {
 @(private)
 goto_interrupt :: proc(cpu: ^CPU, interrupt_address: u16) {
     return_hi, return_lo := address_to_bytes(cpu.program_counter)
+    cpu.cycle += 1
 
     stack_push(cpu, return_lo)
     cpu.cycle += 1
@@ -324,7 +325,13 @@ goto_interrupt :: proc(cpu: ^CPU, interrupt_address: u16) {
     stack_push(cpu, return_hi)
     cpu.cycle += 1
 
-    stack_push(cpu, transmute(u8)cpu.status)
+    cpu_status := cpu.status
+    cpu_status += {.Break}
+
+    stack_push(cpu, transmute(u8)cpu_status)
+    cpu.status += {.Interrupt_Disable}
+
+    cpu.cycle += 1
 
     pc_lo := cpu_mem_read(cpu, interrupt_address)
     cpu.cycle += 1

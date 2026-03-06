@@ -273,6 +273,15 @@ rts: Instruction_Code : proc(
     cpu_advance(cpu)
 }
 
+brk: Instruction_Code : proc(
+    cpu: ^CPU,
+    addressing_mode: Instruction_Addressing_Mode,
+) {
+    cpu.interrupt_requested = true
+
+    cpu_advance(cpu)
+}
+
 rti: Instruction_Code : proc(
     cpu: ^CPU,
     addressing_mode: Instruction_Addressing_Mode,
