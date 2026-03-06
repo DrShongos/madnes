@@ -6,46 +6,20 @@ import "../formats"
 import "core:fmt"
 import "core:os"
 
-import sdl "vendor:sdl3"
+import rl "vendor:raylib"
+
 
 Emulator :: struct {
-    window:           ^sdl.Window,
-    surface:          ^sdl.Surface,
-    renderer:         ^sdl.Renderer,
-    ppu_texture:      ^sdl.Texture,
     emulated_console: console.Console,
+    ppu_texture: rl.Texture2D,
 }
 
 @(private)
-setup_window :: proc(emulator: ^Emulator) {
-    init_success := sdl.Init({.VIDEO, .EVENTS})
-    if !init_success {
-        fmt.eprintf("Failed to initialize SDL3: %s", sdl.GetError())
-        os.exit(-1)
-    }
+prepare_ppu_texture :: proc(emulator: ^Emulator) {
+    base_image := rl.GenImageColor(console.PPU_FRAME_WIDTH, console.PPU_FRAME_HEIGHT, rl.BLACK)
+    defer rl.UnloadImage(base_image)
 
-    emulator.window = sdl.CreateWindow("MADNES", 1280, 720, {})
-    if emulator.window == nil {
-        fmt.eprintf("Failed to create the Window: %s", sdl.GetError())
-        os.exit(-1)
-    }
-
-    emulator.surface = sdl.GetWindowSurface(emulator.window)
-    emulator.renderer = sdl.CreateSoftwareRenderer(emulator.surface)
-
-    if emulator.renderer == nil {
-        fmt.eprintf("Failed to create the Renderer: %s", sdl.GetError())
-        os.exit(-1)
-    }
-
-    emulator.ppu_texture = sdl.CreateTexture(
-        emulator.renderer,
-        .RGBA32,
-        .STREAMING,
-        256,
-        240,
-    )
-    sdl.SetTextureScaleMode(emulator.ppu_texture, .NEAREST)
+    emulator.ppu_texture = rl.LoadTextureFromImage(base_image)
 }
 
 emulator_new :: proc(filepath: string) -> Emulator {
@@ -64,24 +38,21 @@ emulator_new :: proc(filepath: string) -> Emulator {
     ines_format := formats.nes2_0_parse(rom_file)
     console.console_load_cartridge(&emulator.emulated_console, &ines_format)
 
-    setup_window(&emulator)
+    rl.InitWindow(console.PPU_FRAME_WIDTH * 4, console.PPU_FRAME_HEIGHT * 4, "MADNES")
+    prepare_ppu_texture(&emulator)
 
     return emulator
 }
 
 emulator_run :: proc(emulator: ^Emulator) {
     main_loop: for {
-        emu_event: sdl.Event
-        for sdl.PollEvent(&emu_event) {
-            #partial switch emu_event.type {
-            case .QUIT:
-                break main_loop
-            }
+        if (rl.WindowShouldClose()) { 
+            break
         }
 
         console.console_tick(&emulator.emulated_console)
 
-        //emulator_render(emulator)
+        emulator_render(emulator)
 
     }
 }
@@ -105,26 +76,19 @@ emulator_pattern_table_dump :: proc(emulator: ^Emulator, pattern_table: u16) {
 emulator_render :: proc(emulator: ^Emulator) {
     if emulator.emulated_console.ppu.scanline == 241 {
         console.ppu_render_nametable(&emulator.emulated_console.ppu, &emulator.emulated_console.mapper)
-        sdl.UpdateTexture(
-            emulator.ppu_texture,
-            nil,
-            &emulator.emulated_console.ppu.frame,
-            256 * size_of(i32),
-        )
+        rl.UpdateTexture(emulator.ppu_texture, raw_data(emulator.emulated_console.ppu.frame[:]))
     }
 
-    sdl.RenderClear(emulator.renderer)
+    rl.BeginDrawing()
+    rl.DrawTextureEx(emulator.ppu_texture, {0.0, 0.0}, 0.0, 4.0, rl.WHITE)
 
+    rl.ClearBackground(rl.BLACK)
 
-    sdl.RenderTexture(emulator.renderer, emulator.ppu_texture, nil, nil)
-
-    sdl.RenderPresent(emulator.renderer)
-    sdl.UpdateWindowSurface(emulator.window)
+    rl.EndDrawing()
 }
 
 emulator_delete :: proc(emulator: ^Emulator) {
+    rl.UnloadTexture(emulator.ppu_texture)
+    rl.CloseWindow()
     console.console_delete(&emulator.emulated_console)
-    sdl.DestroyRenderer(emulator.renderer)
-    sdl.DestroyWindow(emulator.window)
-    sdl.Quit()
 }
