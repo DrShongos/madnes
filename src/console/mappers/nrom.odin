@@ -38,6 +38,10 @@ nrom_remove :: proc(nrom: ^NROM) {
 // Reads memory from the NROM cartridge, based on the specified address banks.
 // Alongside the byte, returns a bool that specifies whether the read operation had succeeded.
 nrom_mem_read :: proc(nrom: ^NROM, address: u16) -> (bool, u8) {
+    if len(nrom.prg_rom) < 1 {
+        return false, 0
+    }
+    
     // (0x6000 - 0x7fff) - PRG Ram, Mirrored
     if address >= 0x6000 && address <= 0x7fff {
         return true, nrom.prg_ram[(int(address) % len(nrom.prg_ram))]
@@ -54,6 +58,10 @@ nrom_mem_read :: proc(nrom: ^NROM, address: u16) -> (bool, u8) {
 // Reads CHR memory from the NROM cartridge.
 // Alongside the byte, returns a bool that specifies whether the read operation had succeeded.
 nrom_ppu_read :: proc(nrom: ^NROM, address: u16) -> (bool, u8) {
+    if len(nrom.chr_rom) < 1 {
+        return false, 0
+    }
+
     if address >= 0x0000 && address <= 0x1fff {
         return true, nrom.chr_rom[(int(address) % len(nrom.chr_rom))]
     }
@@ -64,6 +72,10 @@ nrom_ppu_read :: proc(nrom: ^NROM, address: u16) -> (bool, u8) {
 // Writes memory to the NROM cartridge, based on the specified address banks.
 // Returns a bool that specifies whether the write operation had succeeded.
 nrom_mem_write :: proc(nrom: ^NROM, address: u16, value: u8) -> bool {
+    if len(nrom.prg_rom) < 1 {
+        return false
+    }
+
     if address >= 0x6000 && address <= 0x7fff {
         nrom.prg_ram[(int(address) % len(nrom.prg_ram))] = value
         return true

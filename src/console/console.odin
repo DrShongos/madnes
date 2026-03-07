@@ -3,6 +3,7 @@ package console
 import "../formats"
 import "./mappers"
 import "core:fmt"
+import "core:os"
 
 PPU_WARMUP_CYCLE :: 29658
 
@@ -57,6 +58,7 @@ console_tick :: proc(console: ^Console) {
         ppu_tick(&console.ppu, console)
         ppu_tick(&console.ppu, console)
     }
+
     //ppu_tick(&console.ppu, console)
 
     if console.cpu.total_cycles >= PPU_WARMUP_CYCLE {

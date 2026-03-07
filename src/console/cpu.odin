@@ -1,6 +1,7 @@
 package console
 
 import "core:fmt"
+import "core:os"
 
 import "mappers"
 

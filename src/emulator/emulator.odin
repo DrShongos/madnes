@@ -23,10 +23,10 @@ prepare_ppu_texture :: proc(emulator: ^Emulator) {
 }
 
 emulator_new :: proc(filepath: string) -> Emulator {
-    rom_file, success := os.read_entire_file_from_filename(filepath)
+    rom_file, rom_read_error := os.read_entire_file_from_path(filepath, context.allocator)
     defer delete(rom_file)
 
-    if !success {
+    if rom_read_error != os.General_Error.None {
         fmt.eprintf("Failed to open the specified ROM file.\n")
         os.exit(-1)
     }
@@ -53,7 +53,6 @@ emulator_run :: proc(emulator: ^Emulator) {
         console.console_tick(&emulator.emulated_console)
 
         emulator_render(emulator)
-
     }
 }
 
@@ -75,14 +74,13 @@ emulator_pattern_table_dump :: proc(emulator: ^Emulator, pattern_table: u16) {
 
 emulator_render :: proc(emulator: ^Emulator) {
     if emulator.emulated_console.ppu.scanline == 241 {
-        console.ppu_render_nametable(&emulator.emulated_console.ppu, &emulator.emulated_console.mapper)
         rl.UpdateTexture(emulator.ppu_texture, raw_data(emulator.emulated_console.ppu.frame[:]))
     }
 
     rl.BeginDrawing()
-    rl.DrawTextureEx(emulator.ppu_texture, {0.0, 0.0}, 0.0, 4.0, rl.WHITE)
-
     rl.ClearBackground(rl.BLACK)
+
+    rl.DrawTextureEx(emulator.ppu_texture, {0.0, 0.0}, 0.0, 4.0, rl.WHITE)
 
     rl.EndDrawing()
 }

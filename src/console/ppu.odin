@@ -23,8 +23,8 @@ NAMETABLE_2 :: 0x2800
 NAMETABLE_3 :: 0x2C00
 
 PPU_Ctrl_Flag :: enum {
-    // Toggled at the end of the NMI interrupt
-    VBlank_NMI_Output                = 7,
+    // Used to control whether the PPU is allowed to trigger an NMI
+    VBlank_NMI_Enable                = 7,
     // Specifies the behaviour of the EXT pins
     // (0 - Read backdrop, 1 - Color output)
     Master_Select                    = 6,
@@ -306,10 +306,10 @@ ppu_mem_write :: proc(
     }
 
     if address == 0x2000 {
-        nmi_pre_update := .VBlank_NMI_Output in ppu.ctrl
+        nmi_pre_update := .VBlank_NMI_Enable in ppu.ctrl
         ppu.ctrl = transmute(PPU_Ctrl)val
 
-        nmi_post_update := .VBlank_NMI_Output in ppu.ctrl
+        nmi_post_update := .VBlank_NMI_Enable in ppu.ctrl
         if !nmi_pre_update &&
            nmi_post_update &&
            (ppu.status & PPU_VBLANK != 0) {
@@ -365,9 +365,10 @@ ppu_tick :: proc(ppu: ^PPU, console: ^Console) {
 
     if ppu.scanline == 241 {
         ppu.status = set_bit(ppu.status, PPU_VBLANK)
+        ppu_render_nametable(ppu, &console.mapper)
     }
 
-    if .VBlank_NMI_Output in ppu.ctrl && ppu.status & PPU_VBLANK != 0 {
+    if .VBlank_NMI_Enable in ppu.ctrl && ppu.status & PPU_VBLANK != 0 {
         console.cpu.nmi_requested = true
         ppu.status = clear_bit(ppu.status, PPU_VBLANK)
     }
