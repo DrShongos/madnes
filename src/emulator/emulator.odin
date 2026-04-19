@@ -8,22 +8,28 @@ import "core:os"
 
 import rl "vendor:raylib"
 
-
 Emulator :: struct {
     emulated_console: console.Console,
-    ppu_texture: rl.Texture2D,
+    ppu_texture:      rl.Texture2D,
 }
 
 @(private)
 prepare_ppu_texture :: proc(emulator: ^Emulator) {
-    base_image := rl.GenImageColor(console.PPU_FRAME_WIDTH, console.PPU_FRAME_HEIGHT, rl.BLACK)
+    base_image := rl.GenImageColor(
+        console.PPU_FRAME_WIDTH,
+        console.PPU_FRAME_HEIGHT,
+        rl.BLACK,
+    )
     defer rl.UnloadImage(base_image)
 
     emulator.ppu_texture = rl.LoadTextureFromImage(base_image)
 }
 
 emulator_new :: proc(filepath: string) -> Emulator {
-    rom_file, rom_read_error := os.read_entire_file_from_path(filepath, context.allocator)
+    rom_file, rom_read_error := os.read_entire_file_from_path(
+        filepath,
+        context.allocator,
+    )
     defer delete(rom_file)
 
     if rom_read_error != os.General_Error.None {
@@ -38,7 +44,11 @@ emulator_new :: proc(filepath: string) -> Emulator {
     ines_format := formats.nes2_0_parse(rom_file)
     console.console_load_cartridge(&emulator.emulated_console, &ines_format)
 
-    rl.InitWindow(console.PPU_FRAME_WIDTH * 4, console.PPU_FRAME_HEIGHT * 4, "MADNES")
+    rl.InitWindow(
+        console.PPU_FRAME_WIDTH * 4,
+        console.PPU_FRAME_HEIGHT * 4,
+        "MADNES",
+    )
     prepare_ppu_texture(&emulator)
 
     return emulator
@@ -46,7 +56,7 @@ emulator_new :: proc(filepath: string) -> Emulator {
 
 emulator_run :: proc(emulator: ^Emulator) {
     main_loop: for {
-        if (rl.WindowShouldClose()) { 
+        if (rl.WindowShouldClose()) {
             break
         }
 
@@ -68,13 +78,17 @@ emulator_pattern_table_dump :: proc(emulator: ^Emulator, pattern_table: u16) {
             pattern_table * 0x1000,
             8 * x,
             8 * y,
+            0,
         )
     }
 }
 
 emulator_render :: proc(emulator: ^Emulator) {
     if emulator.emulated_console.ppu.scanline == 241 {
-        rl.UpdateTexture(emulator.ppu_texture, raw_data(emulator.emulated_console.ppu.frame[:]))
+        rl.UpdateTexture(
+            emulator.ppu_texture,
+            raw_data(emulator.emulated_console.ppu.frame[:]),
+        )
     }
 
     rl.BeginDrawing()

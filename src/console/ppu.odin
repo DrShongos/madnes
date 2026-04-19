@@ -1,9 +1,15 @@
 package console
 
 import "core:fmt"
+import "core:os"
 import "mappers"
 
 PPU_VRAM_SIZE :: 0x2000
+
+BACKDROP_PALETTE_VRAM_START :: 0x3f00
+SPRITE_PALETTE_VRAM_START :: 0x3f10
+
+PALETTE_TABLE_SIZE :: 0x20
 
 // PPU STATUS BITS
 PPU_SPRITE_OVERFLOW :: 0x20
@@ -98,6 +104,7 @@ PPU :: struct {
     // It is a 16-bit value, which can only be modified by writing
     // Two different bytes individually.
     vram_address:     Double_Write,
+    palette_table:    [PALETTE_TABLE_SIZE]u8,
 
     // The PPUDATA register during reading returns data previously held in the buffer.
     // After being accessed, the buffer gets updated to hold the next value.
@@ -114,15 +121,32 @@ PPU :: struct {
     ///////////// RENDERING CONTROL /////////////////////////////
     // The image produced by the PPU
     frame:            [PPU_FRAME_WIDTH * PPU_FRAME_HEIGHT]u32,
+    system_palette:   System_Palette,
     cycles:           int,
     scanline:         int,
 }
 
 ppu_new :: proc() -> PPU {
+    // Make the choice of palettes configurable
+    system_palette, palette_read_err := read_palette_from_path("2C02G.pal")
+    if palette_read_err != .Ok {
+        #partial switch palette_read_err {
+        case .Out_Of_Memory:
+            fmt.eprintf("PPU Error: Out of memory.\n")
+            os.exit(-1)
+        case .Not_Found:
+            fmt.eprintf(
+                "PPU Error: The specified colour palette could not be found.\n",
+            )
+            os.exit(-1)
+        }
+    }
+
     ppu := PPU {
-        status      = 0,
-        write_latch = false,
-        initialized = false,
+        status         = 0,
+        system_palette = system_palette,
+        write_latch    = false,
+        initialized    = false,
     }
 
     for i in 0 ..< PPU_VRAM_SIZE {
@@ -219,7 +243,11 @@ ppu_vram_read :: proc(ppu: ^PPU, mapper: ^mappers.NROM, address: u16) -> u8 {
         return ppu.vram[nametable_address % PPU_VRAM_SIZE]
     }
 
-    // TODO: (0x3f00-0x3fff) SHOULD BE CONFIGURED TO RETURN DATA FROM THE PALETTE TABLE
+    if address >= BACKDROP_PALETTE_VRAM_START && address <= 0x3fff {
+        palette_offset := address % PALETTE_TABLE_SIZE
+        return ppu.palette_table[palette_offset]
+    }
+
     return ppu.vram[address % PPU_VRAM_SIZE]
 }
 
@@ -232,11 +260,18 @@ ppu_vram_write :: proc(
     val: u8,
 ) {
     // TODO: Configure to handle mappers (once a mapper with CHR-RAM gets implemented)
-    // And exclude the palette table
     if address >= 0x2000 && address <= 0x2fff {
         nametable_address := nametable_mirror(mapper, address)
         ppu.vram[nametable_address % PPU_VRAM_SIZE] = val
+        return
     }
+
+    if address >= BACKDROP_PALETTE_VRAM_START && address <= 0x3fff {
+        palette_offset := address % PALETTE_TABLE_SIZE
+        ppu.palette_table[palette_offset] = val
+        return
+    }
+
     ppu.vram[address % PPU_VRAM_SIZE] = val
 }
 
@@ -313,8 +348,8 @@ ppu_mem_write :: proc(
         if !nmi_pre_update &&
            nmi_post_update &&
            (ppu.status & PPU_VBLANK != 0) {
-                ppu.status = clear_bit(ppu.status, PPU_VBLANK)
-                console.cpu.nmi_requested = true
+            ppu.status = clear_bit(ppu.status, PPU_VBLANK)
+            console.cpu.nmi_requested = true
         }
     }
 
@@ -418,6 +453,7 @@ nametable_pattern_start :: proc(ppu: ^PPU) -> u16 {
 
 ppu_render_nametable :: proc(ppu: ^PPU, mapper: ^mappers.NROM) {
     nametable_addr := get_nametable_base_address(ppu)
+    attrib_table_addr := get_attrib_table_address(nametable_addr)
 
     nametable_end := nametable_addr + PPU_NAMETABLE_SIZE
 
@@ -427,6 +463,14 @@ ppu_render_nametable :: proc(ppu: ^PPU, mapper: ^mappers.NROM) {
     for nametable_entry in nametable_addr ..< nametable_end {
         // Nametables have 30 rows of 32 tiles
         tile_index := ppu_vram_read(ppu, mapper, nametable_entry)
+        tile_palette := attrib_table_get_tile(
+            ppu,
+            mapper,
+            attrib_table_addr,
+            nametable_entry,
+        )
+        fmt.println(tile_palette)
+
         ppu_render_tile(
             ppu,
             mapper,
@@ -434,6 +478,7 @@ ppu_render_nametable :: proc(ppu: ^PPU, mapper: ^mappers.NROM) {
             nametable_pattern_start(ppu),
             8 * x,
             8 * y,
+            tile_palette,
         )
 
         x += 1
@@ -451,9 +496,12 @@ ppu_render_tile :: proc(
     pattern_start: u16,
     x: int,
     y: int,
+    palette: u8,
 ) {
     first_plane := pattern_start + u16(pattern_table_index * 16)
     second_plane := pattern_start + u16(pattern_table_index * 16) + 8
+
+    palette_addr := attrib_table_get_palette_address(ppu, palette)
 
     color_index := 0
 
@@ -491,16 +539,24 @@ ppu_render_tile :: proc(
 
             // Clear the pixel
             ppu_clear_pixel(ppu, x, y)
+            if first_plane_test == 0 && second_plane_test == 0 {
+                entry := palette_table_get_color(ppu, mapper, palette_addr, 0)
+                ppu_frame_set_pixel(ppu, x, y, entry.r, entry.g, entry.b)
+            }
+
             if first_plane_test != 0 && second_plane_test == 0 {
-                ppu_frame_set_pixel(ppu, x, y, 0xff, 0, 0)
+                entry := palette_table_get_color(ppu, mapper, palette_addr, 1)
+                ppu_frame_set_pixel(ppu, x, y, entry.r, entry.g, entry.b)
             }
 
             if first_plane_test == 0 && second_plane_test != 0 {
-                ppu_frame_set_pixel(ppu, x, y, 0, 0xff, 0)
+                entry := palette_table_get_color(ppu, mapper, palette_addr, 2)
+                ppu_frame_set_pixel(ppu, x, y, entry.r, entry.g, entry.b)
             }
 
             if first_plane_test != 0 && second_plane_test != 0 {
-                ppu_frame_set_pixel(ppu, x, y, 0, 0, 0xff)
+                entry := palette_table_get_color(ppu, mapper, palette_addr, 3)
+                ppu_frame_set_pixel(ppu, x, y, entry.r, entry.g, entry.b)
             }
 
             bit_test /= 2
